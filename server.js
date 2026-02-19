@@ -724,9 +724,17 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
 .cube-anim{animation:cubeOut .45s ease-in forwards}
 .stolen-anim{animation:bottleStolen .6s ease-out forwards}
 /* ── COMBO FLASH ── */
-#combo-flash{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;z-index:50;text-align:center;white-space:nowrap}
-@keyframes flashIn{0%{opacity:0;transform:translateX(-50%) scale(.7)}30%{opacity:1;transform:translateX(-50%) scale(1.1)}60%{opacity:1;transform:translateX(-50%) scale(1)}85%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) scale(1)}}
-.flash-text{font-family:'Cinzel',serif;font-size:1.4rem;letter-spacing:.18em;color:#fff;text-shadow:0 0 18px #d4a843,0 0 32px rgba(212,168,67,.6),0 2px 4px rgba(0,0,0,.9);animation:flashIn 3.5s ease-out forwards}
+/* ── COMBO FLASH ── */
+#combo-flash{
+  display:flex;align-items:center;justify-content:center;
+  min-height:2.2rem;width:100%;pointer-events:none;
+}
+.flash-text{
+  font-family:'Cinzel',serif;font-size:1.35rem;letter-spacing:.18em;
+  color:#fff;text-shadow:0 0 18px #d4a843,0 0 32px rgba(212,168,67,.6),0 2px 4px rgba(0,0,0,.9);
+  opacity:0;transition:opacity .4s ease;
+  writing-mode:horizontal-tb!important;direction:ltr!important;
+}
 /* ── ROLL EXPLAIN BOX ── */
 .roll-explain{background:rgba(0,0,0,.2);border:1px solid rgba(160,112,40,.2);border-radius:6px;padding:.4rem .7rem;font-style:italic;font-size:.82rem;color:var(--cream-dark);text-align:center;min-height:1.5rem}
 
@@ -1013,7 +1021,7 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
         <div id="status-box">—</div>
         <div class="roll-explain" id="roll-explain"></div>
         <div id="dice-row"></div>
-        <div id="combo-flash" style="position:relative;height:0;overflow:visible"></div>
+        <div id="combo-flash"></div>
         <div id="combo-row"></div>
         <div class="btn-row" id="action-btns"></div>
       </div>
@@ -1813,37 +1821,44 @@ function renderComboBadges(combos, statusText){
 }
 
 let flashTimer = null;
+let flashTimer2 = null;
 function showComboFlash(combos){
   const el = $('combo-flash');
   if(!el || !combos || !combos.length) return;
-  // Build label
   const LABELS = {
     PENTA:'✦ PENTA ✦',
     QUAD:'✦ QUAD ✦',
     TRIPLE_DOUBLE:'✦ TRIPLE + DOUBLE ✦',
     DOUBLE:'✦ DOUBLE ✦',
   };
-  // Show the highest impact combo
   const order = ['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'];
+
+  function showOne(key, then){
+    el.innerHTML = '';
+    const span = document.createElement('div');
+    span.className = 'flash-text';
+    span.textContent = LABELS[key]||key;
+    el.appendChild(span);
+    // Fade in
+    requestAnimationFrame(()=>{
+      requestAnimationFrame(()=>{ span.style.opacity='1'; });
+    });
+    // Hold then fade out
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(()=>{
+      span.style.opacity='0';
+      if(then) flashTimer2 = setTimeout(then, 500);
+    }, 2800);
+  }
+
   const top = order.find(k => combos.includes(k));
   if(!top) return;
-  // Clear previous
-  clearTimeout(flashTimer);
-  el.innerHTML = '';
-  const span = document.createElement('div');
-  span.className = 'flash-text';
-  span.textContent = LABELS[top];
-  el.appendChild(span);
-  // If multiple combos, show second after first fades
+  clearTimeout(flashTimer); clearTimeout(flashTimer2);
   const second = order.find(k => combos.includes(k) && k!==top);
   if(second){
-    flashTimer = setTimeout(()=>{
-      el.innerHTML='';
-      const s2=document.createElement('div');
-      s2.className='flash-text';
-      s2.textContent=LABELS[second];
-      el.appendChild(s2);
-    }, 3700);
+    showOne(top, ()=>showOne(second, null));
+  } else {
+    showOne(top, null);
   }
 }
 
