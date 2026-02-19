@@ -855,7 +855,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .combo-effect{font-size:.78rem;color:var(--cream);font-style:italic}
 
 /* ── OVERLAY ── */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px);padding:1rem}
 .overlay.open{display:flex}
 .modal{background:linear-gradient(160deg,#2a1808 0%,#1c1005 50%,#120a02 100%);border:2px solid #c49030;border-radius:13px;padding:1.7rem 1.9rem;max-width:420px;width:92%;text-align:center;box-shadow:0 0 60px rgba(0,0,0,.85),inset 0 1px 0 rgba(196,144,48,.12);writing-mode:horizontal-tb!important;direction:ltr!important}
 .modal *{writing-mode:horizontal-tb!important;direction:ltr!important}
@@ -1201,7 +1201,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 </div>
 
 <div class="overlay" id="win-overlay">
-  <div class="modal" id="win-modal" style="max-width:480px">
+  <div class="modal" id="win-modal" style="max-width:480px;text-align:center">
     <h2 id="win-title">You Win!</h2>
     <p id="win-msg">Six bottles stocked!</p>
     <div class="gold-line"></div>
@@ -1508,16 +1508,18 @@ function renderStall(id, slots, changes){
     } else if(v===2){
       slot.innerHTML=bottleSVG();
       if(change && change.type==='bottle'){
+        SFX.bottle();
         // New bottle — animate in
         slot.querySelector('svg').classList.add('bottle-anim');
         // Glow the slot border too
         slot.style.boxShadow='0 0 18px rgba(58,173,96,.8)';
         setTimeout(()=>{ if(slot.parentNode) slot.style.boxShadow=''; }, 900);
       } else if(change && change.type==='stolen'){
+        SFX.steal();
         slot.querySelector('svg').classList.add('stolen-anim');
       }
     } else if(change && change.type==='cube_removed'){
-      // Slot just became empty — show a cube briefly then animate out
+      SFX.cube();
       const ghost=document.createElement('div');
       ghost.className='red-cube cube-anim';
       slot.appendChild(ghost);
@@ -1541,7 +1543,8 @@ function renderMyHand(hand,phase,isMyTurn,sel){
       if(sel.includes(i))c.classList.add('selected');
       c.onclick=(e)=>{
         if(e.target.classList.contains('card-info-btn')){openCardInfo(card);return;}
-        send({type:'SELECT_CARD',idx:i});
+        SFX.card();
+      send({type:'SELECT_CARD',idx:i});
       };
     } else {
       c.onclick=(e)=>openCardInfo(card);
@@ -1669,7 +1672,7 @@ function renderWinStats(s){
   const hdrStyle='font-family:Cinzel,serif;font-size:1rem;opacity:.7;padding:.2rem .7rem';
   el.innerHTML=
     '<div style="font-family:Cinzel,serif;font-size:1rem;color:var(--gold-light);letter-spacing:.1em;text-align:center;margin-bottom:.6rem">— Game Summary —</div>'+
-    '<table style="width:100%;border-collapse:collapse">'+
+    '<table style="width:100%;border-collapse:collapse;margin:0 auto">'+
       '<thead><tr>'+
         '<th style="text-align:right;color:var(--gold-light);'+hdrStyle+'">'+s.myName+'</th>'+
         '<th></th>'+
@@ -1690,14 +1693,14 @@ function renderButtons(s){
     const b=document.createElement('button');
     b.className='btn';
     b.innerHTML='▶ Continue';
-    b.onclick=()=>send({type:'CONTINUE'});
+    b.onclick=()=>{SFX.click();send({type:'CONTINUE'});};
     el.appendChild(b);
     return;
   }
   if(s.phase==='CARD_PLAY'){
     const b=document.createElement('button');
     b.className='btn';b.textContent=s.sel.length?'✔ Confirm Cards & Roll':'🎲 Roll Dice';
-    b.onclick=()=>send({type:'ROLL'});el.appendChild(b);
+    b.onclick=()=>SFX.click();send({type:'ROLL'});el.appendChild(b);
     if(s.sel.length){
       const c=document.createElement('button');c.className='btn danger sm';c.textContent='✕ Clear';
       c.onclick=()=>[...s.sel].forEach(i=>send({type:'SELECT_CARD',idx:i}));el.appendChild(c);
@@ -1712,6 +1715,7 @@ function handleOverlays(s){
     const iWon=s.winnerIdx===s.myIdx;
     const wm=$('win-modal');
     wm.className='modal '+(iWon?'i-won':'i-lost');
+    setTimeout(()=>iWon?SFX.win():SFX.lose(), 300);
     $('win-title').textContent=iWon?'🎉 You Win!':'You Lose!';
     $('win-msg').textContent=iWon
       ?'Six bottles stocked — you are the talk of the fair!'
@@ -1783,6 +1787,7 @@ function initDice(){
 
 function renderDice(dice,combos){
   const changed=JSON.stringify(dice)!==JSON.stringify(lastDice);
+  if(changed && dice.some(d=>d>0)) SFX.roll();
   lastDice=dice;
 
   // Build frequency map and assign a colour group index to each face value (only for groups >=2)
@@ -1810,6 +1815,9 @@ function renderDice(dice,combos){
 function renderComboBadges(combos, statusText){
   const el=$('combo-row');el.innerHTML='';
   if(!combos||!combos.length) return;
+  // Sound based on best combo
+  if(combos.includes('PENTA')) SFX.penta();
+  else if(combos.length) SFX.combo();
 
   // Parse how many bottles were stocked from the status text
   const bottleMatch = statusText && statusText.match(/(\d+) bottle/);
@@ -1877,6 +1885,101 @@ function hideReconnectBanner(fully){
 
 initDice();
 connect();
+// ══ SOUND FX (Web Audio API — no files needed) ══════════════
+const SFX = (function(){
+  let ctx = null;
+  function ac(){
+    if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)();
+    if(ctx.state==='suspended') ctx.resume();
+    return ctx;
+  }
+  function osc(freq, type, dur, vol, attack, decay){
+    const c=ac(), o=c.createOscillator(), g=c.createGain();
+    o.connect(g); g.connect(c.destination);
+    o.type=type||'sine'; o.frequency.setValueAtTime(freq,c.currentTime);
+    g.gain.setValueAtTime(0,c.currentTime);
+    g.gain.linearRampToValueAtTime(vol||0.3, c.currentTime+(attack||0.01));
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+(dur||0.3));
+    o.start(c.currentTime); o.stop(c.currentTime+(dur||0.3)+(decay||0));
+  }
+  function noise(dur, vol){
+    const c=ac(), buf=c.createBuffer(1,c.sampleRate*dur,c.sampleRate);
+    const d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1);
+    const s=c.createBufferSource(), g=c.createGain();
+    s.buffer=buf; s.connect(g); g.connect(c.destination);
+    g.gain.setValueAtTime(vol||0.15, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+dur);
+    s.start();
+  }
+  return {
+    roll: function(){
+      // Dice rattling — rapid noise bursts
+      for(let i=0;i<6;i++) setTimeout(()=>noise(0.06, 0.12), i*55);
+      setTimeout(()=>noise(0.12, 0.18), 330);
+    },
+    bottle: function(){
+      // Satisfying glass clink — two harmonics
+      osc(880,'sine',0.5,0.25,0.005);
+      setTimeout(()=>osc(1320,'sine',0.4,0.15,0.005), 30);
+      setTimeout(()=>osc(660,'sine',0.3,0.1,0.005), 80);
+    },
+    steal: function(){
+      // Sneaky descending slide
+      const c=ac(), o=c.createOscillator(), g=c.createGain();
+      o.connect(g); g.connect(c.destination);
+      o.type='sawtooth';
+      o.frequency.setValueAtTime(600, c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(200, c.currentTime+0.3);
+      g.gain.setValueAtTime(0.18, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+0.35);
+      o.start(); o.stop(c.currentTime+0.4);
+    },
+    cube: function(){
+      // Heavy thud — low thump
+      const c=ac(), o=c.createOscillator(), g=c.createGain();
+      o.connect(g); g.connect(c.destination);
+      o.type='sine';
+      o.frequency.setValueAtTime(120, c.currentTime);
+      o.frequency.exponentialRampToValueAtTime(40, c.currentTime+0.2);
+      g.gain.setValueAtTime(0.4, c.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, c.currentTime+0.25);
+      o.start(); o.stop(c.currentTime+0.3);
+    },
+    combo: function(){
+      // Ascending fanfare — three notes
+      [0,150,320].forEach((t,i)=>{
+        const freqs=[[440,554,659],[494,622,740],[523,659,784]];
+        freqs[i].forEach((f,j)=>setTimeout(()=>osc(f,'sine',0.35,0.12,0.01), j*30));
+      });
+    },
+    penta: function(){
+      // Big dramatic hit
+      noise(0.08, 0.3);
+      [220,277,330,415,523].forEach((f,i)=>setTimeout(()=>osc(f,'sawtooth',0.5,0.15,0.01), i*40));
+    },
+    win: function(){
+      // Victory fanfare
+      const melody=[523,659,784,1047];
+      melody.forEach((f,i)=>setTimeout(()=>osc(f,'sine',0.5,0.2,0.02), i*150));
+      setTimeout(()=>osc(1047,'sine',1.0,0.25,0.02), 600);
+    },
+    lose: function(){
+      // Sad trombone-ish
+      const notes=[440,415,392,349];
+      notes.forEach((f,i)=>setTimeout(()=>osc(f,'sawtooth',0.45,0.15,0.02), i*180));
+    },
+    click: function(){
+      osc(800,'sine',0.06,0.08,0.002);
+    },
+    card: function(){
+      // Card whoosh
+      noise(0.05, 0.08);
+      setTimeout(()=>osc(400,'triangle',0.08,0.06,0.005), 20);
+    },
+  };
+})();
+
 </script>
 </body>
 </html>`;
