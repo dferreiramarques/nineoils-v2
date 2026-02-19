@@ -750,18 +750,7 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
 .bottle-anim{animation:bottleIn .55s cubic-bezier(.22,1,.36,1) forwards}
 .cube-anim{animation:cubeOut .45s ease-in forwards}
 .stolen-anim{animation:bottleStolen .6s ease-out forwards}
-/* ── COMBO FLASH ── */
-/* ── COMBO FLASH ── */
-#combo-flash{
-  display:flex;align-items:center;justify-content:center;
-  min-height:2.2rem;width:100%;pointer-events:none;
-}
-.flash-text{
-  font-family:'Cinzel',serif;font-size:1.35rem;letter-spacing:.18em;
-  color:#fff;text-shadow:0 0 18px #d4a843,0 0 32px rgba(212,168,67,.6),0 2px 4px rgba(0,0,0,.9);
-  opacity:0;transition:opacity .4s ease;
-  writing-mode:horizontal-tb!important;direction:ltr!important;
-}
+
 /* ── ROLL EXPLAIN BOX ── */
 .roll-explain{background:rgba(0,0,0,.2);border:1px solid rgba(160,112,40,.2);border-radius:6px;padding:.4rem .7rem;font-style:italic;font-size:.82rem;color:var(--cream-dark);text-align:center;min-height:1.5rem}
 
@@ -1048,7 +1037,6 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
         <div id="status-box">—</div>
         <div class="roll-explain" id="roll-explain"></div>
         <div id="dice-row"></div>
-        <div id="combo-flash"></div>
         <div id="combo-row"></div>
         <div class="btn-row" id="action-btns"></div>
       </div>
@@ -1442,7 +1430,6 @@ function leaveLobby(){
 
 // ══ GAME RENDER ════════════════════════════════════════════
 let prevStalls = null;
-let lastFlashedCombos = '';
 
 function renderGame(){
   if(!state)return;
@@ -1471,25 +1458,7 @@ function renderGame(){
   renderDice(s.dice,s.combos||[]);
   renderComboBadges(s.combos||[],s.status);
 
-  // Only trigger flash when we get NEW combos — never clear it mid-animation
-  const comboKey = (s.combos||[]).join(',');
-  // Also flash during ROLL_PAUSE using the status to detect combos
-  const pauseComboKey = s.phase==='ROLL_PAUSE' ? s.status : '';
-  const flashKey = comboKey || pauseComboKey;
-  if(s.phase==='ROLL_PAUSE' && pauseComboKey !== lastFlashedCombos){
-    lastFlashedCombos = pauseComboKey;
-    // Detect which combos from status text to flash
-    const toFlash=[];
-    if(s.status.indexOf('Penta')>=0) toFlash.push('PENTA');
-    else if(s.status.indexOf('Quad')>=0) toFlash.push('QUAD');
-    if(s.status.indexOf('Triple')>=0) toFlash.push('TRIPLE_DOUBLE');
-    if(s.status.indexOf('Double')>=0&&s.status.indexOf('Triple')<0) toFlash.push('DOUBLE');
-    else if(s.status.indexOf('Double')>=0&&s.status.indexOf('Triple')>=0) toFlash.push('TRIPLE_DOUBLE');
-    if(toFlash.length) showComboFlash(toFlash);
-  } else if(comboKey && comboKey !== lastFlashedCombos){
-    lastFlashedCombos = comboKey;
-    showComboFlash(s.combos);
-  }
+
 
   renderButtons(s);
   handleOverlays(s);
@@ -1868,47 +1837,7 @@ function renderComboBadges(combos, statusText){
   });
 }
 
-let flashTimer = null;
-let flashTimer2 = null;
-function showComboFlash(combos){
-  const el = $('combo-flash');
-  if(!el || !combos || !combos.length) return;
-  const LABELS = {
-    PENTA:'✦ PENTA ✦',
-    QUAD:'✦ QUAD ✦',
-    TRIPLE_DOUBLE:'✦ TRIPLE + DOUBLE ✦',
-    DOUBLE:'✦ DOUBLE ✦',
-  };
-  const order = ['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'];
 
-  function showOne(key, then){
-    el.innerHTML = '';
-    const span = document.createElement('div');
-    span.className = 'flash-text';
-    span.textContent = LABELS[key]||key;
-    el.appendChild(span);
-    // Fade in
-    requestAnimationFrame(()=>{
-      requestAnimationFrame(()=>{ span.style.opacity='1'; });
-    });
-    // Hold then fade out
-    clearTimeout(flashTimer);
-    flashTimer = setTimeout(()=>{
-      span.style.opacity='0';
-      if(then) flashTimer2 = setTimeout(then, 500);
-    }, 2800);
-  }
-
-  const top = order.find(k => combos.includes(k));
-  if(!top) return;
-  clearTimeout(flashTimer); clearTimeout(flashTimer2);
-  const second = order.find(k => combos.includes(k) && k!==top);
-  if(second){
-    showOne(top, ()=>showOne(second, null));
-  } else {
-    showOne(top, null);
-  }
-}
 
 function bottleSVG(){return '<svg class="bottle-svg" viewBox="0 0 26 52" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="1" width="10" height="5.5" rx="2.5" fill="#17502a"/><rect x="9.5" y="6" width="7" height="3" rx="1" fill="#17502a"/><path d="M5.5 8.5 C3.5 15 3 21 3 27 C3 41 10.5 49.5 13 50.5 C15.5 49.5 23 41 23 27 C23 21 22.5 15 20.5 8.5 Z" fill="#2a7040"/><path d="M5.5 8.5 C3.5 15 3 21 3 27 C3 39 9 47 12 50" stroke="#3a9054" stroke-width="1.4" fill="none" opacity=".5"/><path d="M7.5 14 C6 19 5.5 24 6 27" stroke="rgba(255,255,255,.09)" stroke-width="1.2" fill="none"/></svg>';}
 
