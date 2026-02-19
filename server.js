@@ -503,7 +503,18 @@ function botDefend(lobby){
 }
 
 // ─── HTTP ────────────────────────────────────────────────
+const fs=require('fs'), path=require('path');
 const server=http.createServer((req,res)=>{
+  if(req.url.startsWith('/img/')){
+    const file=path.join(__dirname,'img',path.basename(req.url.split('?')[0]));
+    fs.readFile(file,(err,data)=>{
+      if(err){res.writeHead(404);res.end();return;}
+      const ext=path.extname(file).slice(1).replace('jpg','jpeg');
+      res.writeHead(200,{'Content-Type':'image/'+ext,'Cache-Control':'public,max-age=86400'});
+      res.end(data);
+    });
+    return;
+  }
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(CLIENT_HTML);
 });
@@ -738,7 +749,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .game-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem}
 
 /* ── RULES SIDEBAR ── */
-.rules-sidebar{width:230px;flex-shrink:0;background:var(--felt);border:1.5px solid var(--border);border-radius:12px;padding:.9rem 1rem;font-size:.82rem;line-height:1.5;display:flex;flex-direction:column;gap:.65rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
+.rules-sidebar{width:290px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.1rem;font-size:.86rem;line-height:1.55;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
 .rules-sidebar::-webkit-scrollbar{width:4px}
 .rules-sidebar::-webkit-scrollbar-track{background:transparent}
 .rules-sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -1582,8 +1593,9 @@ function openCardInfo(type){
   el.appendChild(frame);
 
   const effectText = info.effect.split('|').map(function(s){return s.trim();}).join('<br><br>');
-  const imgTag = CARD_IMGS[type]
-    ? '<img src="'+CARD_IMGS[type]+'" style="width:120px;height:auto;border-radius:7px;border:1.5px solid rgba(160,112,40,.5);display:block">'
+  const imgSrc = CARD_IMGS[type] ? location.origin + CARD_IMGS[type] : null;
+  const imgTag = imgSrc
+    ? '<img src="'+imgSrc+'" style="width:130px;height:auto;border-radius:7px;border:1.5px solid rgba(140,95,30,.5);display:block">'
     : '';
 
   const doc = frame.contentDocument || frame.contentWindow.document;
