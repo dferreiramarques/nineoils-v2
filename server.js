@@ -1598,41 +1598,42 @@ function openCardInfo(type){
 function renderWinStats(s){
   const el=$('win-stats'); if(!el||!s.stats)return;
   const me=s.stats[s.myIdx], opp=s.stats[1-s.myIdx];
-  const bestCombo=(st)=>{
+  const bestCombo=function(st){
     if(st.combos.PENTA>0)return'PENTA';
     if(st.combos.QUAD>0)return'QUAD';
     if(st.combos.TRIPLE_DOUBLE>0)return'TRIPLE+DBL';
     if(st.combos.DOUBLE>0)return'DOUBLE';
     return'—';
   };
+  const rows=[
+    {label:'Turns',      me:me.turns,     opp:opp.turns,     text:false},
+    {label:'Stocked',    me:me.stocked,   opp:opp.stocked,   text:false},
+    {label:'Stolen',     me:me.stolen,    opp:opp.stolen,    text:false},
+    {label:'Cards',      me:me.cards,     opp:opp.cards,     text:false},
+    {label:'Best Combo', me:bestCombo(me),opp:bestCombo(opp),text:true},
+  ];
+  const numStyle='text-align:right;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:1.2rem;color:var(--gold);font-weight:700';
+  const numStyleOpp='text-align:left;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:1.2rem;color:var(--cream-dark);font-weight:700';
+  const txtStyle='text-align:right;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:.82rem;color:var(--gold);font-weight:700';
+  const txtStyleOpp='text-align:left;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:.82rem;color:var(--cream-dark);font-weight:700';
+  const midStyle='text-align:center;padding:.3rem .4rem;font-size:.82rem;color:var(--cream-dark);font-style:italic;white-space:nowrap';
+  let rowsHtml='';
+  rows.forEach(function(r){
+    const ms=r.text?txtStyle:numStyle;
+    const os=r.text?txtStyleOpp:numStyleOpp;
+    rowsHtml+='<tr><td style="'+ms+'">'+r.me+'</td><td style="'+midStyle+'">'+r.label+'</td><td style="'+os+'">'+r.opp+'</td></tr>';
+  });
+  const hdrStyle='font-family:Cinzel,serif;font-size:.75rem;opacity:.7;padding:.2rem .6rem';
   el.innerHTML=
-    '<div class="stats-title">— Game Summary —</div>'+
-    '<div class="stats-compare">'+
-      '<div class="stats-compare-col">'+
-        '<div class="stats-compare-row you"><span class="stats-compare-val">'+me.turns+'</span></div>'+
-        '<div class="stats-compare-row you"><span class="stats-compare-val">'+me.stocked+'</span></div>'+
-        '<div class="stats-compare-row you"><span class="stats-compare-val">'+me.stolen+'</span></div>'+
-        '<div class="stats-compare-row you"><span class="stats-compare-val">'+me.cards+'</span></div>'+
-        '<div class="stats-compare-row you"><span class="stats-compare-val" style="font-size:.78rem">'+bestCombo(me)+'</span></div>'+
-      '</div>'+
-      '<div class="stats-compare-divider">'+
-        '<div class="stats-compare-mid">Turns</div>'+
-        '<div class="stats-compare-mid">Stocked</div>'+
-        '<div class="stats-compare-mid">Stolen</div>'+
-        '<div class="stats-compare-mid">Cards</div>'+
-        '<div class="stats-compare-mid">Best Combo</div>'+
-      '</div>'+
-      '<div class="stats-compare-col">'+
-        '<div class="stats-compare-row opp"><span class="stats-compare-val opp">'+opp.turns+'</span></div>'+
-        '<div class="stats-compare-row opp"><span class="stats-compare-val opp">'+opp.stocked+'</span></div>'+
-        '<div class="stats-compare-row opp"><span class="stats-compare-val opp">'+opp.stolen+'</span></div>'+
-        '<div class="stats-compare-row opp"><span class="stats-compare-val opp">'+opp.cards+'</span></div>'+
-        '<div class="stats-compare-row opp"><span class="stats-compare-val opp" style="font-size:.78rem">'+bestCombo(opp)+'</span></div>'+
-      '</div>'+
-    '</div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:.78rem;color:rgba(200,184,136,.4);margin-top:.15rem;padding:0 .1rem">'+
-      '<span>'+s.myName+'</span><span>'+s.oppName+'</span>'+
-    '</div>';
+    '<div style="font-family:Cinzel,serif;font-size:.82rem;color:var(--gold-light);letter-spacing:.1em;text-align:center;margin-bottom:.5rem">— Game Summary —</div>'+
+    '<table style="width:100%;border-collapse:collapse">'+
+      '<thead><tr>'+
+        '<th style="text-align:right;color:var(--gold-light);'+hdrStyle+'">'+s.myName+'</th>'+
+        '<th></th>'+
+        '<th style="text-align:left;color:var(--cream-dark);'+hdrStyle+'">'+s.oppName+'</th>'+
+      '</tr></thead>'+
+      '<tbody>'+rowsHtml+'</tbody>'+
+    '</table>';
 }
 
 function renderButtons(s){
