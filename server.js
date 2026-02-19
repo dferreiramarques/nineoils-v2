@@ -749,7 +749,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .game-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem}
 
 /* ── RULES SIDEBAR ── */
-.rules-sidebar{width:290px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.1rem;font-size:.86rem;line-height:1.55;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
+.rules-sidebar{width:360px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.2rem;font-size:.88rem;line-height:1.6;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
 .rules-sidebar::-webkit-scrollbar{width:4px}
 .rules-sidebar::-webkit-scrollbar-track{background:transparent}
 .rules-sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -790,7 +790,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .red-cube{width:32px;height:32px;background:linear-gradient(145deg,#c03030 0%,#8a1818 60%,#4a0e0e 100%);border-radius:6px;box-shadow:2px 3px 6px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.12)}
 .bottle-svg{display:block;width:26px;height:52px}
 .hand-header{font-family:'IM Fell English',serif;font-style:italic;font-size:.78rem;color:var(--cream-dark);margin-bottom:.4rem;opacity:.8}
-.hand-cards{display:flex;gap:.4rem;flex-wrap:wrap;min-height:64px;align-items:flex-start}
+.hand-cards{display:flex;gap:.4rem;flex-wrap:wrap;min-height:64px;align-items:flex-start;max-width:480px}
 .empty-hand{font-style:italic;color:rgba(200,184,136,.25);font-size:.78rem;align-self:center}
 
 /* ── CARDS ── */
