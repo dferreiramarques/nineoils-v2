@@ -148,6 +148,10 @@ function newGame(nameA,nameB,isSolo){
 }
 
 function buildView(g,seat){
+  // During ROLL_PAUSE, expose the pending combos so client can show badges
+  const displayCombos = (g.phase==='ROLL_PAUSE' && g._pendingAnalysis && !g._pendingAnalysis.conflict)
+    ? g._pendingAnalysis.combos
+    : g.combos;
   return {
     myIdx:seat,
     myName:g.players[seat].name,
@@ -161,7 +165,7 @@ function buildView(g,seat){
     cur:g.cur,
     isMyTurn:g.cur===seat,
     status:g.status,
-    combos:g.combos,
+    combos:displayCombos,
     comboOptions:g.comboOptions,
     rollExplain:g.rollExplain,
     sel:g.cur===seat?g.sel:[],
@@ -1181,7 +1185,6 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
 
 <div class="overlay" id="win-overlay">
   <div class="modal" id="win-modal" style="max-width:480px">
-    <div class="modal-icon">🍾</div>
     <h2 id="win-title">You Win!</h2>
     <p id="win-msg">Six bottles stocked!</p>
     <div class="gold-line"></div>
@@ -1638,20 +1641,20 @@ function renderWinStats(s){
     {label:'Cards',      me:me.cards,     opp:opp.cards,     text:false},
     {label:'Best Combo', me:bestCombo(me),opp:bestCombo(opp),text:true},
   ];
-  const numStyle='text-align:right;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:1.2rem;color:var(--gold);font-weight:700';
-  const numStyleOpp='text-align:left;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:1.2rem;color:var(--cream-dark);font-weight:700';
-  const txtStyle='text-align:right;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:.82rem;color:var(--gold);font-weight:700';
-  const txtStyleOpp='text-align:left;padding:.3rem .6rem;font-family:Cinzel,serif;font-size:.82rem;color:var(--cream-dark);font-weight:700';
-  const midStyle='text-align:center;padding:.3rem .4rem;font-size:.82rem;color:var(--cream-dark);font-style:italic;white-space:nowrap';
+  const numStyle='text-align:right;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--gold);font-weight:700';
+  const numStyleOpp='text-align:left;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--cream-dark);font-weight:700';
+  const txtStyle='text-align:right;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--gold);font-weight:700';
+  const txtStyleOpp='text-align:left;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--cream-dark);font-weight:700';
+  const midStyle='text-align:center;padding:.4rem .5rem;font-size:1rem;color:var(--cream-dark);font-style:italic;white-space:nowrap';
   let rowsHtml='';
   rows.forEach(function(r){
     const ms=r.text?txtStyle:numStyle;
     const os=r.text?txtStyleOpp:numStyleOpp;
     rowsHtml+='<tr><td style="'+ms+'">'+r.me+'</td><td style="'+midStyle+'">'+r.label+'</td><td style="'+os+'">'+r.opp+'</td></tr>';
   });
-  const hdrStyle='font-family:Cinzel,serif;font-size:.75rem;opacity:.7;padding:.2rem .6rem';
+  const hdrStyle='font-family:Cinzel,serif;font-size:1rem;opacity:.7;padding:.2rem .7rem';
   el.innerHTML=
-    '<div style="font-family:Cinzel,serif;font-size:.82rem;color:var(--gold-light);letter-spacing:.1em;text-align:center;margin-bottom:.5rem">— Game Summary —</div>'+
+    '<div style="font-family:Cinzel,serif;font-size:1rem;color:var(--gold-light);letter-spacing:.1em;text-align:center;margin-bottom:.6rem">— Game Summary —</div>'+
     '<table style="width:100%;border-collapse:collapse">'+
       '<thead><tr>'+
         '<th style="text-align:right;color:var(--gold-light);'+hdrStyle+'">'+s.myName+'</th>'+
