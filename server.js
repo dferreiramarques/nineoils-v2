@@ -189,7 +189,7 @@ function handleAction(ws,msg){
     const lobby2=lobbies[st.lobbyId]; if(!lobby2)return;
     lobby2.game=newGame(lobby2.names[0],lobby2.solo?'The Peddler':lobby2.names[1],lobby2.solo);
     broadcastGame(lobby2);
-    if(lobby2.solo&&lobby2.game.cur===1) setTimeout(()=>botTurn(lobby2),1200);
+    if(lobby2.solo&&lobby2.game.cur===1) setTimeout(()=>botTurn(lobby2),1800);
     return;
   }
   if(!g||g.winnerIdx!==null)return;
@@ -257,7 +257,7 @@ function processCardPlays(lobby){
       g.phase='BLIND_PICK';
       g.status=`${p.name} plays 2 Bullies! Pick a card blindly from ${opp.name}'s hand.`;
       broadcastGame(lobby);
-      if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),800);
+      if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1400);
       return;
     }
     g.status=`The Bullies flex — but ${opp.name} has an empty hand!`;
@@ -276,7 +276,7 @@ function processCardPlays(lobby){
       g.status=`${p.name} plays The Boy! ${opp.name}, defend with a Bully?`;
       broadcastGame(lobby);
       // If bot is defending
-      if(g.isSolo&&1-g.cur===1) setTimeout(()=>botDefend(lobby),900);
+      if(g.isSolo&&1-g.cur===1) setTimeout(()=>botDefend(lobby),1400);
       return;
     }
     doSteal(g); rollAndResolve(lobby); return;
@@ -308,7 +308,7 @@ function rollAndResolve(lobby){
     g.status=`${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     broadcastGame(lobby);
     // Bot auto-chooses
-    if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),700);
+    if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1500);
   } else {
     g.comboOptions=null;
     applyComboList(lobby,analysis.combos);
@@ -369,7 +369,12 @@ function applyComboList(lobby,combos){
     g.status=`${p.name} stocks their 6th bottle — the crowd goes wild!`;
     broadcastGame(lobby);return;
   }
-  if(p.hand.length>3){g.phase='DISCARD';broadcastGame(lobby);return;}
+  if(p.hand.length>3){
+    g.phase='DISCARD';
+    broadcastGame(lobby);
+    if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1000);
+    return;
+  }
   endTurn(g,lobby);
 }
 
@@ -388,7 +393,7 @@ function endTurn(g,lobby){
   g.status=`${g.players[g.cur].name}'s turn — play cards or roll the dice.`;
   broadcastGame(lobby);
   // If next player is bot, schedule bot turn
-  if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),900);
+  if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1600);
 }
 
 // ─── BOT AI ──────────────────────────────────────────────
@@ -401,18 +406,14 @@ function botTurn(lobby){
     g.sel=[];
     // Play all Temptress cards (always beneficial)
     bot.hand.forEach((c,i)=>{ if(c==='TEMPTRESS') g.sel.push(i); });
-    // Play Boy if no Temptress already selected and opponent has bottles
+    // Play Boy if opponent has bottles
     if(!g.sel.length){
       const boyIdx=bot.hand.indexOf('BOY');
       if(boyIdx>=0&&opp.stall.some(s=>s===2)) g.sel.push(boyIdx);
     }
-    // Play 2 Bullies offensively if opp has cards and bot has 2 bullies
-    if(!g.sel.length){
-      const bullies=bot.hand.reduce((a,c,i)=>c==='BULLY'?[...a,i]:a,[]);
-      if(bullies.length>=2&&opp.hand.length>0) g.sel=[bullies[0],bullies[1]];
-    }
+    // Note: bot never plays 2 Bullies offensively (keeps them for defence)
     broadcastGame(lobby);
-    setTimeout(()=>{ if(g.phase==='CARD_PLAY'&&g.cur===1) processCardPlays(lobby); },700);
+    setTimeout(()=>{ if(g.phase==='CARD_PLAY'&&g.cur===1) processCardPlays(lobby); },1400);
   } else if(g.phase==='CHOOSE_COMBO'){
     // Prefer TRIPLE_DOUBLE (stocks bottles) then QUAD (opens slots) then PENTA
     const order=['TRIPLE_DOUBLE','QUAD','PENTA'];
@@ -427,20 +428,27 @@ function botTurn(lobby){
         trash(g,opp.hand.splice(idx,1)[0]);
         g.status=`The Peddler blindly picks a card from ${g.players[0].name}'s hand!`;
         rollAndResolve(lobby);
-      },700);
+      },1200);
     } else {
       rollAndResolve(lobby);
     }
   } else if(g.phase==='DISCARD'){
-    // Discard first card
+    // Smart discard: priority to keep = BULLY (defence), BOY (steal), TEMPTRESS (bonus)
+    // Discard lowest priority first
     setTimeout(()=>{
       const p=g.players[1];
-      if(p.hand.length>3){
-        trash(g,p.hand.splice(0,1)[0]);
-        if(p.hand.length<=3)endTurn(g,lobby);
-        else{broadcastGame(lobby);botTurn(lobby);}
-      }
-    },500);
+      if(p.hand.length<=3){endTurn(g,lobby);return;}
+      const priority={'BULLY':3,'BOY':2,'TEMPTRESS':1};
+      // Find lowest priority card to discard
+      let discardIdx=0, lowestPri=99;
+      p.hand.forEach(function(c,i){
+        const pri=priority[c]||0;
+        if(pri<lowestPri){lowestPri=pri;discardIdx=i;}
+      });
+      trash(g,p.hand.splice(discardIdx,1)[0]);
+      if(p.hand.length<=3)endTurn(g,lobby);
+      else{broadcastGame(lobby);botTurn(lobby);}
+    },800);
   }
 }
 
@@ -531,7 +539,7 @@ wss.on('connection',(ws,req)=>{
         broadcastGame(lobby);
         broadcastLobbies();
         // If bot goes first, schedule its turn
-        if(lobby.game.cur===1) setTimeout(()=>botTurn(lobby),1200);
+        if(lobby.game.cur===1) setTimeout(()=>botTurn(lobby),1800);
       } else {
         if(lobby.players[1-seat]) sendTo(lobby.players[1-seat],{type:'OPPONENT_JOINED',name:lobby.names[seat]});
         if(lobby.players[0]&&lobby.players[1]){
@@ -717,8 +725,8 @@ body{background:var(--wood-dark);background-image:repeating-linear-gradient(90de
 .stolen-anim{animation:bottleStolen .6s ease-out forwards}
 /* ── COMBO FLASH ── */
 #combo-flash{position:absolute;left:50%;transform:translateX(-50%);pointer-events:none;z-index:50;text-align:center;white-space:nowrap}
-@keyframes flashIn{0%{opacity:0;transform:translateX(-50%) scale(.7)}40%{opacity:1;transform:translateX(-50%) scale(1.08)}70%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) scale(1)}}
-.flash-text{font-family:'Cinzel',serif;font-size:1.4rem;letter-spacing:.18em;color:#fff;text-shadow:0 0 18px #d4a843,0 0 32px rgba(212,168,67,.6),0 2px 4px rgba(0,0,0,.9);animation:flashIn 2.2s ease-out forwards}
+@keyframes flashIn{0%{opacity:0;transform:translateX(-50%) scale(.7)}30%{opacity:1;transform:translateX(-50%) scale(1.1)}60%{opacity:1;transform:translateX(-50%) scale(1)}85%{opacity:1;transform:translateX(-50%) scale(1)}100%{opacity:0;transform:translateX(-50%) scale(1)}}
+.flash-text{font-family:'Cinzel',serif;font-size:1.4rem;letter-spacing:.18em;color:#fff;text-shadow:0 0 18px #d4a843,0 0 32px rgba(212,168,67,.6),0 2px 4px rgba(0,0,0,.9);animation:flashIn 3.5s ease-out forwards}
 /* ── ROLL EXPLAIN BOX ── */
 .roll-explain{background:rgba(0,0,0,.2);border:1px solid rgba(160,112,40,.2);border-radius:6px;padding:.4rem .7rem;font-style:italic;font-size:.82rem;color:var(--cream-dark);text-align:center;min-height:1.5rem}
 
@@ -1399,6 +1407,7 @@ function leaveLobby(){
 
 // ══ GAME RENDER ════════════════════════════════════════════
 let prevStalls = null;
+let lastFlashedCombos = '';
 
 function renderGame(){
   if(!state)return;
@@ -1427,11 +1436,11 @@ function renderGame(){
   renderDice(s.dice,s.combos||[]);
   renderComboBadges(s.combos||[],s.status);
 
-  // Combo flash text above dice
-  if(s.combos&&s.combos.length){
+  // Only trigger flash when we get NEW combos — never clear it mid-animation
+  const comboKey = (s.combos||[]).join(',');
+  if(comboKey && comboKey !== lastFlashedCombos){
+    lastFlashedCombos = comboKey;
     showComboFlash(s.combos);
-  } else {
-    const ef=$('combo-flash'); if(ef) ef.innerHTML='';
   }
 
   renderButtons(s);
@@ -1834,7 +1843,7 @@ function showComboFlash(combos){
       s2.className='flash-text';
       s2.textContent=LABELS[second];
       el.appendChild(s2);
-    }, 2400);
+    }, 3700);
   }
 }
 
