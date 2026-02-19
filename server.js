@@ -256,7 +256,9 @@ function processCardPlays(lobby){
     if(opp.hand.length>0){
       g.phase='BLIND_PICK';
       g.status=`${p.name} plays 2 Bullies! Pick a card blindly from ${opp.name}'s hand.`;
-      broadcastGame(lobby); return;
+      broadcastGame(lobby);
+      if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),800);
+      return;
     }
     g.status=`The Bullies flex — but ${opp.name} has an empty hand!`;
     rollAndResolve(lobby); return;
@@ -416,6 +418,19 @@ function botTurn(lobby){
     const order=['TRIPLE_DOUBLE','QUAD','PENTA'];
     const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
     setTimeout(()=>resolveChosenCombo(lobby,choice),600);
+  } else if(g.phase==='BLIND_PICK'){
+    // Bot picks a random card from human's hand
+    const opp=g.players[0];
+    if(opp.hand.length>0){
+      const idx=Math.floor(Math.random()*opp.hand.length);
+      setTimeout(()=>{
+        trash(g,opp.hand.splice(idx,1)[0]);
+        g.status=`The Peddler blindly picks a card from ${g.players[0].name}'s hand!`;
+        rollAndResolve(lobby);
+      },700);
+    } else {
+      rollAndResolve(lobby);
+    }
   } else if(g.phase==='DISCARD'){
     // Discard first card
     setTimeout(()=>{
