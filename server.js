@@ -327,8 +327,11 @@ function rollAndResolve(lobby){
     g.status=`${g.players[g.cur].name} rolled — no combos. Continue to end turn.`;
   }
   broadcastGame(lobby);
-  // Bot auto-continues after a pause
-  if(g.isSolo&&g.cur===1) setTimeout(()=>resolvePausedRoll(lobby),2000);
+  // Bot handles ROLL_PAUSE via botTurn() called from endTurn
+  if(g.isSolo&&g.cur===1){
+    const gen=g.turnGen||0;
+    setTimeout(()=>{ if(g.turnGen===gen&&g.phase==='ROLL_PAUSE') resolvePausedRoll(lobby); },2000);
+  }
 }
 
 function resolvePausedRoll(lobby){
@@ -343,7 +346,10 @@ function resolvePausedRoll(lobby){
     g.combos=[];
     g.status=`${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     broadcastGame(lobby);
-    if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1500);
+    if(g.isSolo&&g.cur===1){
+      const gen=g.turnGen||0;
+      setTimeout(()=>{ if(g.turnGen===gen&&g.cur===1) botTurn(lobby); },1000);
+    }
   } else {
     g.comboOptions=null;
     applyComboList(lobby,analysis.combos);
@@ -425,70 +431,76 @@ function describeRoll(dice){
 function endTurn(g,lobby){
   g.stats[g.cur].turns++;
   g.cur=1-g.cur;g.phase='CARD_PLAY';g.sel=[];g.combos=[];g.comboOptions=null;g.rollExplain='';
+  g.turnGen=(g.turnGen||0)+1; // increment every turn to cancel stale bot timeouts
   g.status=`${g.players[g.cur].name}'s turn — play cards or roll the dice.`;
   broadcastGame(lobby);
   // If next player is bot, schedule bot turn
-  if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1600);
+  if(g.isSolo&&g.cur===1){
+    const gen=g.turnGen;
+    setTimeout(()=>{ if(g.turnGen===gen) botTurn(lobby); },1600);
+  }
 }
 
 // ─── BOT AI ──────────────────────────────────────────────
 function botTurn(lobby){
   const g=lobby.game;
   if(!g||g.winnerIdx!==null||g.cur!==1||!g.isSolo)return;
+  const gen=g.turnGen||0; // snapshot — if turn changes, these callbacks abort
+  function guard(fn,delay){
+    setTimeout(()=>{ if(g.turnGen===gen&&g.cur===1&&!g.winnerIdx) fn(); },delay);
+  }
   if(g.phase==='CARD_PLAY'){
-    // Decide cards to play
     const bot=g.players[1], opp=g.players[0];
     g.sel=[];
-    // Play all Temptress cards (always beneficial)
+    // Play Temptress cards (always beneficial)
     bot.hand.forEach((c,i)=>{ if(c==='TEMPTRESS') g.sel.push(i); });
     // Play Boy if opponent has bottles
     if(!g.sel.length){
       const boyIdx=bot.hand.indexOf('BOY');
       if(boyIdx>=0&&opp.stall.some(s=>s===2)) g.sel.push(boyIdx);
     }
-    // Note: bot never plays 2 Bullies offensively (keeps them for defence)
     broadcastGame(lobby);
-    setTimeout(()=>{ if(g.phase==='CARD_PLAY'&&g.cur===1) processCardPlays(lobby); },1400);
+    guard(()=>{ if(g.phase==='CARD_PLAY') processCardPlays(lobby); }, 1400);
   } else if(g.phase==='CHOOSE_COMBO'){
-    // Prefer TRIPLE_DOUBLE (stocks bottles) then QUAD (opens slots) then PENTA
     const order=['TRIPLE_DOUBLE','QUAD','PENTA'];
     const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
-    setTimeout(()=>resolveChosenCombo(lobby,choice),600);
+    guard(()=>{ if(g.phase==='CHOOSE_COMBO') resolveChosenCombo(lobby,choice); }, 800);
+  } else if(g.phase==='ROLL_PAUSE'){
+    guard(()=>{ if(g.phase==='ROLL_PAUSE') resolvePausedRoll(lobby); }, 2000);
   } else if(g.phase==='BLIND_PICK'){
-    // Bot picks a random card from human's hand
     const opp=g.players[0];
     if(opp.hand.length>0){
       const idx=Math.floor(Math.random()*opp.hand.length);
-      setTimeout(()=>{
-        trash(g,opp.hand.splice(idx,1)[0]);
-        g.status=`The Peddler blindly picks a card from ${g.players[0].name}'s hand!`;
-        rollAndResolve(lobby);
-      },1200);
+      guard(()=>{
+        if(g.phase==='BLIND_PICK'){
+          trash(g,opp.hand.splice(idx,1)[0]);
+          g.status=`The Peddler blindly picks a card from ${g.players[0].name}'s hand!`;
+          rollAndResolve(lobby);
+        }
+      }, 1200);
     } else {
       rollAndResolve(lobby);
     }
   } else if(g.phase==='DISCARD'){
-    // Smart discard: priority to keep = BULLY (defence), BOY (steal), TEMPTRESS (bonus)
-    // Discard lowest priority first
-    setTimeout(()=>{
+    guard(()=>{
+      if(g.phase!=='DISCARD') return;
       const p=g.players[1];
       if(p.hand.length<=3){endTurn(g,lobby);return;}
       const priority={'BULLY':3,'BOY':2,'TEMPTRESS':1};
-      // Find lowest priority card to discard
       let discardIdx=0, lowestPri=99;
       p.hand.forEach(function(c,i){
         const pri=priority[c]||0;
         if(pri<lowestPri){lowestPri=pri;discardIdx=i;}
       });
       trash(g,p.hand.splice(discardIdx,1)[0]);
-      if(p.hand.length<=3)endTurn(g,lobby);
+      if(p.hand.length<=3) endTurn(g,lobby);
       else{broadcastGame(lobby);botTurn(lobby);}
-    },800);
+    }, 800);
   }
 }
 
 function botDefend(lobby){
-  const g=lobby.game; if(!g||g.phase!=='BOY_DEFEND')return;
+  const g=lobby.game; if(!g||g.phase!=='BOY_DEFEND'||g.cur!==0||!g.isSolo)return;
   const bot=g.players[1];
   const hasBully=bot.hand.includes('BULLY');
   if(hasBully){
