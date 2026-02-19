@@ -205,6 +205,10 @@ function handleAction(ws,msg){
       if(g.cur!==seat||g.phase!=='CARD_PLAY')return;
       processCardPlays(lobby); break;
 
+    case 'CONTINUE':
+      if(g.cur!==seat||g.phase!=='ROLL_PAUSE')return;
+      resolvePausedRoll(lobby); break;
+
     case 'CHOOSE_COMBO':
       if(g.cur!==seat||g.phase!=='CHOOSE_COMBO')return;
       resolveChosenCombo(lobby,msg.combo); break;
@@ -298,8 +302,32 @@ function rollAndResolve(lobby){
   const g=lobby.game;
   g.dice=Array.from({length:9},()=>Math.ceil(Math.random()*6));
   g.rollExplain=describeRoll(g.dice);
+  g._pendingAnalysis=analyseRoll(g.dice);
 
-  const analysis=analyseRoll(g.dice);
+  // Pause so player can see dice before resolution
+  g.phase='ROLL_PAUSE';
+  g.combos=[];
+  g.comboOptions=null;
+  const analysis=g._pendingAnalysis;
+  if(analysis.conflict){
+    g.status=`${g.players[g.cur].name} rolled! See the dice — then continue to choose your combo.`;
+  } else if(analysis.combos.length){
+    const names={PENTA:'Penta',QUAD:'Quad',TRIPLE_DOUBLE:'Triple + Double',DOUBLE:'Double'};
+    const labels=analysis.combos.map(c=>names[c]||c).join(' + ');
+    g.status=`${g.players[g.cur].name} rolled ${labels}! Continue to resolve.`;
+  } else {
+    g.status=`${g.players[g.cur].name} rolled — no combos. Continue to end turn.`;
+  }
+  broadcastGame(lobby);
+  // Bot auto-continues after a pause
+  if(g.isSolo&&g.cur===1) setTimeout(()=>resolvePausedRoll(lobby),2000);
+}
+
+function resolvePausedRoll(lobby){
+  const g=lobby.game;
+  if(!g||g.phase!=='ROLL_PAUSE')return;
+  const analysis=g._pendingAnalysis;
+  g._pendingAnalysis=null;
 
   if(analysis.conflict){
     g.phase='CHOOSE_COMBO';
@@ -307,7 +335,6 @@ function rollAndResolve(lobby){
     g.combos=[];
     g.status=`${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     broadcastGame(lobby);
-    // Bot auto-chooses
     if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1500);
   } else {
     g.comboOptions=null;
@@ -1446,7 +1473,20 @@ function renderGame(){
 
   // Only trigger flash when we get NEW combos — never clear it mid-animation
   const comboKey = (s.combos||[]).join(',');
-  if(comboKey && comboKey !== lastFlashedCombos){
+  // Also flash during ROLL_PAUSE using the status to detect combos
+  const pauseComboKey = s.phase==='ROLL_PAUSE' ? s.status : '';
+  const flashKey = comboKey || pauseComboKey;
+  if(s.phase==='ROLL_PAUSE' && pauseComboKey !== lastFlashedCombos){
+    lastFlashedCombos = pauseComboKey;
+    // Detect which combos from status text to flash
+    const toFlash=[];
+    if(s.status.indexOf('Penta')>=0) toFlash.push('PENTA');
+    else if(s.status.indexOf('Quad')>=0) toFlash.push('QUAD');
+    if(s.status.indexOf('Triple')>=0) toFlash.push('TRIPLE_DOUBLE');
+    if(s.status.indexOf('Double')>=0&&s.status.indexOf('Triple')<0) toFlash.push('DOUBLE');
+    else if(s.status.indexOf('Double')>=0&&s.status.indexOf('Triple')>=0) toFlash.push('TRIPLE_DOUBLE');
+    if(toFlash.length) showComboFlash(toFlash);
+  } else if(comboKey && comboKey !== lastFlashedCombos){
     lastFlashedCombos = comboKey;
     showComboFlash(s.combos);
   }
@@ -1656,8 +1696,16 @@ function renderWinStats(s){
 function renderButtons(s){
   const el=$('action-btns'); el.innerHTML='';
   if(!s.isMyTurn){
-    if(s.phase==='CARD_PLAY'||s.phase==='CHOOSE_COMBO')
+    if(s.phase==='CARD_PLAY'||s.phase==='CHOOSE_COMBO'||s.phase==='ROLL_PAUSE')
       el.innerHTML='<span style="font-style:italic;color:var(--cream-dark);font-size:.88rem">Waiting for '+s.oppName+'…</span>';
+    return;
+  }
+  if(s.phase==='ROLL_PAUSE'){
+    const b=document.createElement('button');
+    b.className='btn';
+    b.innerHTML='▶ Continue';
+    b.onclick=()=>send({type:'CONTINUE'});
+    el.appendChild(b);
     return;
   }
   if(s.phase==='CARD_PLAY'){
