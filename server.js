@@ -799,11 +799,11 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
 /* ── GAME LAYOUT ── */
 #screen-game{padding:.4rem .5rem}
-.game-layout{display:flex;gap:.6rem;align-items:flex-start;max-width:1100px;margin:0 auto}
+.game-layout{display:flex;gap:.6rem;align-items:flex-start;max-width:1220px;margin:0 auto}
 .game-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem}
 
 /* ── RULES SIDEBAR ── */
-.rules-sidebar{width:360px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.2rem;font-size:.88rem;line-height:1.6;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
+.rules-sidebar{width:460px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.2rem;font-size:.88rem;line-height:1.6;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
 .rules-sidebar::-webkit-scrollbar{width:4px}
 .rules-sidebar::-webkit-scrollbar-track{background:transparent}
 .rules-sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -897,8 +897,8 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .dot.off{visibility:hidden}
 /* Combo result cards */
 /* ── CHAT PANEL ── */
-#chat-panel{display:flex;flex-direction:column;background:linear-gradient(160deg,#1e1208,#140e05);border:1.5px solid var(--border);border-radius:11px;overflow:hidden;flex-shrink:0}
-#chat-log{height:155px;overflow-y:auto;padding:.6rem .75rem;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem}
+#chat-panel{display:flex;flex-direction:column;background:linear-gradient(160deg,#1e1208,#140e05);border:1.5px solid var(--border);border-radius:11px;overflow:hidden}
+#chat-log{height:110px;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem}
 #chat-log::-webkit-scrollbar{width:3px}
 #chat-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .chat-msg{line-height:1.4;word-break:break-word}
@@ -1160,11 +1160,8 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
     </div><!-- /game-main -->
 
-    <!-- Right column: rules + chat -->
-    <div style="display:flex;flex-direction:column;gap:.5rem;width:360px;flex-shrink:0">
-
-    <!-- Rules Sidebar -->
-    <div class="rules-sidebar" style="width:auto;position:static;max-height:calc(100vh - 260px)">
+    <!-- Right column: rules only -->
+    <div class="rules-sidebar" style="width:460px;position:sticky;top:.5rem;max-height:calc(100vh - 80px)">
       <div class="rules-section">
         <h3>🎯 Objective</h3>
         <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
@@ -1247,7 +1244,10 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
       </div>
     </div><!-- /rules-sidebar -->
 
-    <!-- Chat panel -->
+  </div><!-- /game-layout -->
+
+  <!-- Chat: full width below the game layout -->
+  <div style="max-width:1220px;margin:.5rem auto 0">
     <div id="chat-panel">
       <div id="chat-log"><div class="chat-msg system">The fair is open. Good luck!</div></div>
       <div id="chat-input-row">
@@ -1255,9 +1255,8 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         <button id="chat-send" onclick="sendChat()" title="Send">➤</button>
       </div>
     </div>
+  </div>
 
-    </div><!-- /right-column -->
-  </div><!-- /game-layout -->
 </div><!-- /screen-game -->
 
 <!-- OVERLAYS -->
