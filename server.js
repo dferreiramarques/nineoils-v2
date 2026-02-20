@@ -61,56 +61,66 @@ function analyseRoll(dice) {
   dice.forEach(d=>freq[d]=(freq[d]||0)+1);
   const entries=Object.entries(freq).map(([v,c])=>({v:+v,c})).sort((a,b)=>b.c-a.c);
   const max=entries[0]?.c||0;
+  const topFace=entries[0]?.v;
 
+  // ── INSTANT WIN: 9 of a kind ──────────────────────────
+  if(max===9) return {conflict:false, special:'INSTANT_WIN', combos:['INSTANT_WIN'], freq};
+
+  // ── JOKER: 7 or 8 of a kind ──────────────────────────
+  // (6 and 8 have no extra rule, but 7 is the Joker)
+  if(max===7) return {
+    conflict:true, special:'JOKER',
+    primary:['DOUBLE','TRIPLE_DOUBLE','QUAD','PENTA'],
+    hasDouble:false, freq
+  };
+
+  // ── NORMAL COMBOS ─────────────────────────────────────
   const tripleEntry=entries.find(e=>e.c>=3);
   const dblEntry=tripleEntry?entries.find(e=>e.c>=2&&e.v!==tripleEntry.v):null;
   const hasTripleDouble=!!(tripleEntry&&dblEntry);
 
-  // Build set of primary options (the ones that share dice and can conflict)
+  // Build set of primary options from the highest-count face
   const primary=[];
   if(max>=5) primary.push('PENTA');
   if(max>=4) primary.push('QUAD');
   if(hasTripleDouble) primary.push('TRIPLE_DOUBLE');
 
-  // DOUBLE is available if there's a pair NOT consumed by a chosen primary
-  // We compute this per-choice later; for now flag whether it's structurally possible
+  // DOUBLE is available from a DIFFERENT face only (one combo per face rule)
   const hasDouble=max>=2;
 
   if(primary.length<=1){
-    // No conflict - auto-resolve everything
     const combos=[...primary];
     if(hasDouble && canDoubleCoexist(dice,primary[0])) combos.push('DOUBLE');
-    return {conflict:false, combos, freq};
+    return {conflict:false, special:null, combos, freq};
   }
   // Conflict: player must choose
-  return {conflict:true, primary, hasDouble, freq};
+  return {conflict:true, special:null, primary, hasDouble, freq};
 }
 
 function canDoubleCoexist(dice,chosenPrimary){
-  // After consuming dice for chosen combo, is there still a pair left?
+  // Under the "one combo per face" rule:
+  // DOUBLE can only come from a DIFFERENT face than the one used by the primary combo.
+  // Same-face leftover dice do NOT qualify for an additional DOUBLE.
   const freq={};
   dice.forEach(d=>freq[d]=(freq[d]||0)+1);
   const entries=Object.entries(freq).map(([v,c])=>({v:+v,c})).sort((a,b)=>b.c-a.c);
-  const used={};
+
+  // Track which faces are consumed by the primary
+  const usedFaces=new Set();
 
   if(chosenPrimary==='PENTA'){
-    const pv=entries.find(e=>e.c>=5); if(pv) used[pv.v]=5;
+    const pv=entries.find(e=>e.c>=5); if(pv) usedFaces.add(pv.v);
   } else if(chosenPrimary==='QUAD'){
-    const qv=entries.find(e=>e.c>=4); if(qv) used[qv.v]=4;
+    const qv=entries.find(e=>e.c>=4); if(qv) usedFaces.add(qv.v);
   } else if(chosenPrimary==='TRIPLE_DOUBLE'){
-    const tv=entries.find(e=>e.c>=3); if(tv) used[tv.v]=3;
-    const dv=tv?entries.find(e=>e.c>=2&&e.v!==tv.v):null; if(dv) used[dv.v]=2;
+    const tv=entries.find(e=>e.c>=3); if(tv) usedFaces.add(tv.v);
+    const dv=tv?entries.find(e=>e.c>=2&&e.v!==tv.v):null; if(dv) usedFaces.add(dv.v);
   } else if(!chosenPrimary){
-    // No primary chosen — pair is just any pair
-    return Object.values(freq).some(c=>c>=2);
+    return entries.some(e=>e.c>=2);
   }
 
-  // Check remaining dice for a pair
-  for(const [v,c] of Object.entries(freq)){
-    const left=c-(used[+v]||0);
-    if(left>=2) return true;
-  }
-  return false;
+  // DOUBLE only from faces NOT used by the primary
+  return entries.some(e=>!usedFaces.has(e.v)&&e.c>=2);
 }
 
 // ─── GAME LOGIC ──────────────────────────────────────────
@@ -168,6 +178,7 @@ function buildView(g,seat){
     status:g.status,
     combos:displayCombos,
     comboOptions:g.comboOptions,
+    comboPickReason:g._jokerRoll?'JOKER':'CONFLICT',
     rollExplain:g.rollExplain,
     sel:g.cur===seat?g.sel:[],
     winnerIdx:g.winnerIdx,
@@ -234,6 +245,16 @@ function handleAction(ws,msg){
       trash(g,opp.hand.splice(msg.cardIdx,1)[0]);
       g.status=`${g.players[g.cur].name} blindly picks a card from ${g.players[1-g.cur].name}'s hand!`;
       rollAndResolve(lobby); break;
+
+    case 'CHAT':
+      if(!msg.text||typeof msg.text!=='string')return;
+      const txt=msg.text.trim().slice(0,120); if(!txt)return;
+      const sender=lobby.names[seat]||('Player '+(seat+1));
+      // Broadcast chat to both players at this table
+      for(const [cws,cst] of wsState){
+        if(cst.lobbyId===st.lobbyId) sendTo(cws,{type:'CHAT',name:sender,text:txt,seat});
+      }
+      return;
 
     case 'DISCARD':
       if(g.phase!=='DISCARD'||seat!==g.cur)return;
@@ -341,14 +362,27 @@ function resolvePausedRoll(lobby){
   const analysis=g._pendingAnalysis;
   g._pendingAnalysis=null;
 
+  // ── INSTANT WIN ────────────────────────────────────────
+  if(analysis.special==='INSTANT_WIN'){
+    g.comboOptions=null;
+    applyComboList(lobby,['INSTANT_WIN']);
+    return;
+  }
+
+  // ── JOKER or normal conflict ───────────────────────────
   if(analysis.conflict){
     g.phase='CHOOSE_COMBO';
     g.comboOptions=analysis.primary;
     g.combos=[];
-    g.status=`${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
+    g._jokerRoll=analysis.special==='JOKER'; // flag for resolveChosenCombo
+    const msg=g._jokerRoll
+      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any combo.`
+      : `${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
+    g.status=msg;
     broadcastGame(lobby);
     if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1000);
   } else {
+    g._jokerRoll=false;
     g.comboOptions=null;
     applyComboList(lobby,analysis.combos);
   }
@@ -358,9 +392,10 @@ function resolveChosenCombo(lobby,chosen){
   const g=lobby.game;
   g.comboOptions=null;
 
-  // After chosen primary, check if DOUBLE coexists
   const combos=[chosen];
-  if(canDoubleCoexist(g.dice,chosen)) combos.push('DOUBLE');
+  // Joker uses all 7 dice of the same face — no other face can give a DOUBLE
+  if(!g._jokerRoll && canDoubleCoexist(g.dice,chosen)) combos.push('DOUBLE');
+  g._jokerRoll=false;
   applyComboList(lobby,combos);
 }
 
@@ -369,6 +404,13 @@ function applyComboList(lobby,combos){
   g.combos=combos;
   const p=g.players[g.cur],opp=g.players[1-g.cur];
   const msgs=[];
+
+  // ── INSTANT WIN (9 of a kind) ──────────────────────────
+  if(combos.includes('INSTANT_WIN')){
+    g.phase='GAME_OVER'; g.winnerIdx=g.cur;
+    g.status=`${p.name} rolled NINE of a kind! An impossible feat — instant victory!`;
+    broadcastGame(lobby); return;
+  }
 
   if(combos.includes('DOUBLE')){
     g.stats[g.cur].combos.DOUBLE++;
@@ -468,7 +510,9 @@ function botTurn(lobby){
     return;
   }
   if(g.phase==='CHOOSE_COMBO'){
-    const order=['TRIPLE_DOUBLE','QUAD','PENTA'];
+    // Bot priority: PENTA > QUAD > TRIPLE_DOUBLE > DOUBLE
+    // This works for both normal conflicts and Joker (all 4 options presented)
+    const order=['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'];
     const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
     const gen=g.turnGen;
     setTimeout(()=>{
@@ -852,6 +896,36 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .dot{width:7px;height:7px;background:#1a0f00;border-radius:50%;margin:auto;box-shadow:0 1px 2px rgba(0,0,0,.35)}
 .dot.off{visibility:hidden}
 /* Combo result cards */
+/* ── CHAT PANEL ── */
+#chat-panel{display:flex;flex-direction:column;background:linear-gradient(160deg,#1e1208,#140e05);border:1.5px solid var(--border);border-radius:11px;overflow:hidden;flex-shrink:0}
+#chat-log{height:155px;overflow-y:auto;padding:.6rem .75rem;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem}
+#chat-log::-webkit-scrollbar{width:3px}
+#chat-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.chat-msg{line-height:1.4;word-break:break-word}
+.chat-msg .chat-name{font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.06em}
+.chat-msg.mine .chat-name{color:var(--gold)}
+.chat-msg.theirs .chat-name{color:#7abcef}
+.chat-msg .chat-text{color:var(--cream-dark)}
+.chat-msg.system{font-style:italic;color:rgba(200,184,136,.35);font-size:.74rem;text-align:center}
+#chat-input-row{display:flex;border-top:1px solid rgba(140,95,30,.22)}
+#chat-input{flex:1;background:transparent;border:none;padding:.42rem .6rem;font-family:'IM Fell English',serif;font-style:italic;font-size:.82rem;color:var(--cream);outline:none}
+#chat-input::placeholder{color:rgba(200,184,136,.28)}
+#chat-send{background:transparent;border:none;border-left:1px solid rgba(140,95,30,.22);padding:.42rem .65rem;color:var(--gold);cursor:pointer;font-size:.88rem;transition:color .15s}
+#chat-send:hover{color:var(--gold-light)}
+
+/* ── DICE ROLL ANIMATION ── */
+@keyframes dieFlip{0%{transform:rotateY(0) scale(1)}25%{transform:rotateY(90deg) scale(1.1)}50%{transform:rotateY(180deg) scale(1.04)}75%{transform:rotateY(270deg) scale(1.07)}100%{transform:rotateY(360deg) scale(1)}}
+.die.rolling{animation:dieFlip .42s ease-out}
+
+/* ── CARD DEAL ANIMATION ── */
+@keyframes cardDeal{0%{opacity:0;transform:translateY(-16px) scale(.86)}60%{opacity:1;transform:translateY(3px) scale(1.04)}100%{opacity:1;transform:translateY(0) scale(1)}}
+.card.deal-anim{animation:cardDeal .3s cubic-bezier(.22,1,.36,1) both}
+
+/* ── STATUS PULSE on new message ── */
+@keyframes statusPulse{0%{opacity:.5;transform:scaleX(.98)}100%{opacity:1;transform:scaleX(1)}}
+.status-pulse{animation:statusPulse .28s ease-out}
+
+/* ── COMBO ROW ── */
 #combo-row{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:center;min-height:20px}
 .combo-card{display:flex;align-items:center;gap:.55rem;background:rgba(0,0,0,.25);border:1.5px solid rgba(160,112,40,.4);border-radius:10px;padding:.45rem .75rem;animation:comboIn .3s ease-out}
 @keyframes comboIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -1086,8 +1160,11 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
     </div><!-- /game-main -->
 
+    <!-- Right column: rules + chat -->
+    <div style="display:flex;flex-direction:column;gap:.5rem;width:360px;flex-shrink:0">
+
     <!-- Rules Sidebar -->
-    <div class="rules-sidebar">
+    <div class="rules-sidebar" style="width:auto;position:static;max-height:calc(100vh - 260px)">
       <div class="rules-section">
         <h3>🎯 Objective</h3>
         <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
@@ -1157,6 +1234,16 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
       </div>
     </div><!-- /rules-sidebar -->
 
+    <!-- Chat panel -->
+    <div id="chat-panel">
+      <div id="chat-log"><div class="chat-msg system">The fair is open. Good luck!</div></div>
+      <div id="chat-input-row">
+        <input id="chat-input" type="text" maxlength="120" placeholder="Say something…" autocomplete="off">
+        <button id="chat-send" onclick="sendChat()" title="Send">➤</button>
+      </div>
+    </div>
+
+    </div><!-- /right-column -->
   </div><!-- /game-layout -->
 </div><!-- /screen-game -->
 
@@ -1260,6 +1347,8 @@ const COMBO_INFO = {
   QUAD:         { label:'🔓 Quad',           desc:'Remove 1 red blocking cube from your stall', detail:'4 dice showing the same value' },
   TRIPLE_DOUBLE:{ label:'🍾 Triple + Double',desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
   DOUBLE:       { label:'🎲 Double',         desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
+  JOKER:        { label:'🃏 Joker',          desc:'Choose any combo — all 7 dice match!', detail:'7 dice showing the same value' },
+  INSTANT_WIN:  { label:'💀 Nine of a Kind', desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
 };
 
 const DOTS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
@@ -1361,6 +1450,7 @@ function handleMsg(msg){
 
     case 'JOINED':
       myIdx=msg.seat;
+      mySeat=msg.seat;
       if(msg.token){
         sessionToken=msg.token;
         sessionStorage.setItem('nine_oils_token',msg.token);
@@ -1379,8 +1469,13 @@ function handleMsg(msg){
       $('waiting-text').textContent=msg.name+' has joined! Starting…';
       break;
 
+    case 'CHAT':
+      appendChat(msg.name, msg.text, msg.seat);
+      break;
+
     case 'GAME_STATE':
       state=msg.state; myIdx=msg.state.myIdx;
+      if(mySeat===null) mySeat=state.myIdx;
       hideReconnectBanner(true);
       showScreen('screen-game'); renderGame(); break;
 
@@ -1482,8 +1577,10 @@ function renderGame(){
   renderStall('opp-stall', oppStall, oppChanges);
 
   renderMyHand(s.myHand,s.phase,s.isMyTurn,s.sel);
+  animateNewCards();
   renderOppHand(s.oppHandCount);
   $('status-box').textContent=s.status;
+  pulseStatus(s.status);
   $('roll-explain').textContent=s.rollExplain?'You rolled: '+s.rollExplain:'';
   renderDice(s.dice,s.combos||[]);
   renderComboBadges(s.combos||[],s.status);
@@ -1737,7 +1834,10 @@ function handleOverlays(s){
   // CHOOSE COMBO
   if(s.phase==='CHOOSE_COMBO'&&s.isMyTurn&&s.comboOptions){
     const explain=s.rollExplain?'You rolled: '+s.rollExplain+'. ':'';
-    $('combo-overlay-msg').textContent=explain+'These combos conflict — pick one:';
+    const isJoker=s.comboPickReason==='JOKER';
+    $('combo-overlay-msg').textContent=isJoker
+      ? explain+'🃏 Seven of a kind — the Joker! Choose any combo:'
+      : explain+'These combos conflict — pick one:';
     const list=$('combo-choice-list'); list.innerHTML='';
     s.comboOptions.forEach(combo=>{
       const info=COMBO_INFO[combo];
@@ -1813,12 +1913,30 @@ function renderDice(dice,combos){
 
   dice.forEach((val,i)=>{
     const die=document.getElementById('die-'+i);if(!die)return;
-    // Remove all group classes
     for(let g=0;g<6;g++) die.classList.remove('grp-'+g);
-    if(changed){die.classList.add('rolling');setTimeout(()=>die.classList.remove('rolling'),520);}
-    const on=DOTS[val]||[];
-    die.querySelectorAll('.dot').forEach((d,c)=>d.className='dot'+(on.includes(c)?'':' off'));
-    if(groupMap[val]!==undefined) die.classList.add('grp-'+groupMap[val]);
+
+    if(changed && dice.some(d=>d>0)){
+      // Animate: flash random dots during roll, then settle on real value
+      die.classList.add('rolling');
+      let flips=0;
+      const flipInterval=setInterval(()=>{
+        const fake=Math.ceil(Math.random()*6);
+        const fakeOn=DOTS[fake]||[];
+        die.querySelectorAll('.dot').forEach((d,c)=>d.className='dot'+(fakeOn.includes(c)?'':' off'));
+        if(++flips>=5) clearInterval(flipInterval);
+      },60);
+      setTimeout(()=>{
+        die.classList.remove('rolling');
+        // Settle on real value
+        const on=DOTS[val]||[];
+        die.querySelectorAll('.dot').forEach((d,c)=>d.className='dot'+(on.includes(c)?'':' off'));
+        if(groupMap[val]!==undefined) die.classList.add('grp-'+groupMap[val]);
+      }, 420);
+    } else {
+      const on=DOTS[val]||[];
+      die.querySelectorAll('.dot').forEach((d,c)=>d.className='dot'+(on.includes(c)?'':' off'));
+      if(groupMap[val]!==undefined) die.classList.add('grp-'+groupMap[val]);
+    }
   });
 }
 
@@ -1826,7 +1944,8 @@ function renderComboBadges(combos, statusText){
   const el=$('combo-row');el.innerHTML='';
   if(!combos||!combos.length) return;
   // Sound based on best combo
-  if(combos.includes('PENTA')) SFX.penta();
+  if(combos.includes('INSTANT_WIN')) SFX.win();
+  else if(combos.includes('PENTA')) SFX.penta();
   else if(combos.length) SFX.combo();
 
   // Parse how many bottles were stocked from the status text
@@ -1834,6 +1953,11 @@ function renderComboBadges(combos, statusText){
   const bottleCount = bottleMatch ? +bottleMatch[1] : 1;
 
   const COMBO_CARDS = {
+    INSTANT_WIN:{
+      cls:'c-penta', name:'NINE OF A KIND',
+      icon:'💀',
+      effect:'Instant victory — an impossible feat!'
+    },
     PENTA:{
       cls:'c-penta', name:'PENTA',
       icon:'💥',
@@ -1857,7 +1981,7 @@ function renderComboBadges(combos, statusText){
   };
 
   // Show in impact order
-  ['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
+  ['INSTANT_WIN','PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
     if(!combos.includes(key)) return;
     const info=COMBO_CARDS[key];
     const card=document.createElement('div');
@@ -1895,6 +2019,71 @@ function hideReconnectBanner(fully){
 
 initDice();
 connect();
+// ══ CHAT ═══════════════════════════════════════════════════
+let mySeat = null; // set when we receive first STATE
+function appendChat(name, text, seat){
+  const log = $('chat-log'); if(!log) return;
+  const div = document.createElement('div');
+  const isMine = (seat === mySeat);
+  div.className = 'chat-msg ' + (isMine ? 'mine' : 'theirs');
+  div.innerHTML = '<span class="chat-name">'+escHtml(name)+'</span> <span class="chat-text">'+escHtml(text)+'</span>';
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+function appendChatSystem(text){
+  const log = $('chat-log'); if(!log) return;
+  const div = document.createElement('div');
+  div.className = 'chat-msg system';
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+function sendChat(){
+  const inp = $('chat-input'); if(!inp) return;
+  const txt = inp.value.trim(); if(!txt) return;
+  send({type:'CHAT', text: txt});
+  inp.value = '';
+}
+function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Enable Enter key in chat input
+document.addEventListener('DOMContentLoaded',()=>{
+  const inp = $('chat-input');
+  if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') sendChat(); });
+});
+
+// ══ ANIMATIONS ══════════════════════════════════════════════
+let lastStatusText = '';
+function pulseStatus(text){
+  const el = $('status-box'); if(!el) return;
+  if(text !== lastStatusText){
+    lastStatusText = text;
+    el.classList.remove('status-pulse');
+    void el.offsetWidth; // reflow
+    el.classList.add('status-pulse');
+    el.addEventListener('animationend', ()=>el.classList.remove('status-pulse'), {once:true});
+  }
+}
+
+let prevHandCount = -1;
+function animateNewCards(){
+  // Briefly add deal-anim to cards that just appeared
+  const cards = document.querySelectorAll('#my-hand .card.face-up');
+  const count = cards.length;
+  if(count > prevHandCount && prevHandCount >= 0){
+    // Only animate the new ones (last N)
+    const newCount = count - prevHandCount;
+    const toAnim = Array.from(cards).slice(-newCount);
+    toAnim.forEach((c,i)=>{
+      setTimeout(()=>{
+        c.classList.add('deal-anim');
+        c.addEventListener('animationend',()=>c.classList.remove('deal-anim'),{once:true});
+      }, i*60);
+    });
+  }
+  prevHandCount = count;
+}
+
 // ══ SOUND FX (Web Audio API — no files needed) ══════════════
 const SFX = (function(){
   let ctx = null;
