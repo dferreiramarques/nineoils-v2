@@ -186,6 +186,8 @@ function buildView(g,seat){
     isSolo:g.isSolo,
     stats:g.stats,
     boysAttacking:g._boysAttacking||0,
+    deckCount:g.deck.length + g.discard.length,
+    deckRemaining:g.deck.length,
   };
 }
 
@@ -617,7 +619,35 @@ function botDefend(lobby){
 
 // ─── HTTP ────────────────────────────────────────────────
 const fs=require('fs'), path=require('path');
+
+const MANIFEST_JSON = JSON.stringify({
+  name: 'Nine Oils',
+  short_name: 'Nine Oils',
+  description: 'A game of luck and will',
+  start_url: '/',
+  display: 'standalone',
+  background_color: '#120a02',
+  theme_color: '#120a02',
+  orientation: 'portrait-primary',
+  icons: [
+    { src: '/icon-192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+    { src: '/icon-512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
+  ]
+});
+
+const ICON_SVG = (size) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" rx="${size*0.18}" fill="#120a02"/><rect x="${size*0.03}" y="${size*0.03}" width="${size*0.94}" height="${size*0.94}" rx="${size*0.16}" fill="none" stroke="#c49030" stroke-width="${size*0.025}" opacity=".6"/><text x="${size/2}" y="${size*0.73}" text-anchor="middle" font-family="Georgia,serif" font-weight="900" font-size="${size*0.65}" fill="#d4a843">9</text></svg>`;
+
 const server=http.createServer((req,res)=>{
+  const url = req.url.split('?')[0];
+  if(url === '/manifest.json'){
+    res.writeHead(200,{'Content-Type':'application/manifest+json'});
+    res.end(MANIFEST_JSON); return;
+  }
+  if(url === '/icon-192.svg' || url === '/icon-512.svg'){
+    const size = url.includes('512') ? 512 : 192;
+    res.writeHead(200,{'Content-Type':'image/svg+xml','Cache-Control':'public,max-age=86400'});
+    res.end(ICON_SVG(size)); return;
+  }
   if(req.url.startsWith('/img/')){
     const file=path.join(__dirname,'img',path.basename(req.url.split('?')[0]));
     fs.readFile(file,(err,data)=>{
@@ -788,7 +818,13 @@ const CLIENT_HTML = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Nine Oils</title>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
+<meta name="theme-color" content="#120a02">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Nine Oils">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='12' fill='%23120a02'/><rect x='2' y='2' width='60' height='60' rx='11' fill='none' stroke='%23c49030' stroke-width='1.5' opacity='.6'/><text x='32' y='47' text-anchor='middle' font-family='Georgia,serif' font-weight='900' font-size='42' fill='%23d4a843'>9</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Playfair+Display:wght@900&family=Crimson+Text:ital,wght@0,400;0,600;1,400;1,600&family=IM+Fell+English:ital@0;1&display=swap" rel="stylesheet">
 <style>
 :root{
   /* Palette inspired by the card engravings — aged parchment, sepia ink, warm dark wood */
@@ -812,7 +848,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
 /* ── HEADER ── */
 .header{text-align:center;padding:.9rem 1rem .3rem;background:linear-gradient(180deg,rgba(8,4,1,.98),rgba(14,8,3,.95));border-bottom:1px solid rgba(140,95,30,.3)}
-.header h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4vw,2.4rem);font-weight:700;color:var(--gold);letter-spacing:.25em;text-shadow:0 0 18px rgba(212,168,67,.3),0 3px 8px rgba(0,0,0,.8)}
+.header h1{font-family:'Playfair Display',serif;font-size:clamp(1.8rem,4.5vw,2.8rem);font-weight:900;color:var(--gold);letter-spacing:.12em;text-shadow:0 0 18px rgba(212,168,67,.3),0 3px 8px rgba(0,0,0,.8)}
 .header .tagline{font-family:'IM Fell English',serif;font-style:italic;color:var(--cream-dark);font-size:.85rem;margin-top:.2rem}
 
 /* ── SCREENS ── */
@@ -902,6 +938,15 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .slot-num{position:absolute;bottom:2px;right:4px;font-size:.54rem;font-family:'Cinzel',serif;opacity:.22;color:var(--cream)}
 .red-cube{width:32px;height:32px;background:linear-gradient(145deg,#c03030 0%,#8a1818 60%,#4a0e0e 100%);border-radius:6px;box-shadow:2px 3px 6px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.12)}
 .bottle-svg{display:block;width:26px;height:52px}
+.bottle-placeholder{display:block;width:26px;height:52px;border-radius:3px 3px 5px 5px;background:rgba(42,112,64,.25);border:1.5px dashed rgba(42,112,64,.5);position:relative}
+@keyframes deckShuffle{
+  0%{transform:translateY(0) rotate(0deg);opacity:1}
+  30%{transform:translateY(-6px) rotate(-8deg);opacity:.8}
+  60%{transform:translateY(-4px) rotate(6deg);opacity:.9}
+  100%{transform:translateY(0) rotate(0deg);opacity:1}
+}
+.deck-shuffling .deck-card-mini{animation:deckShuffle .5s ease-in-out forwards}
+.deck-card-mini{width:8px;height:12px;border-radius:1px;background:linear-gradient(165deg,var(--wood-mid),var(--wood-dark));border:1px solid rgba(160,112,40,.4);transition:all .3s}
 .hand-header{font-family:'IM Fell English',serif;font-style:italic;font-size:.78rem;color:var(--cream-dark);margin-bottom:.4rem;opacity:.8}
 .hand-cards{display:flex;gap:.4rem;flex-wrap:wrap;min-height:64px;align-items:flex-start;max-width:480px}
 .empty-hand{font-style:italic;color:rgba(200,184,136,.25);font-size:.78rem;align-self:center}
@@ -1130,6 +1175,14 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
 <!-- ══ NAME SCREEN ══ -->
 <div class="screen active" id="screen-name" style="max-width:520px;margin:1rem auto">
+
+  <!-- Video placeholder -->
+  <div id="video-placeholder" style="width:100%;aspect-ratio:16/9;background:linear-gradient(160deg,#1a0e04,#0d0702);border:1.5px solid rgba(160,112,40,.3);border-radius:12px;margin-bottom:1rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.6rem;cursor:pointer;transition:border-color .2s" onclick="this.style.borderColor='var(--gold)'">
+    <div style="width:56px;height:56px;border-radius:50%;background:rgba(196,144,48,.15);border:2px solid rgba(196,144,48,.4);display:flex;align-items:center;justify-content:center;font-size:1.6rem">▶</div>
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.12em;color:var(--cream-dark)">HOW TO PLAY</div>
+    <div style="font-size:.7rem;color:rgba(200,184,136,.3);font-style:italic">Video coming soon</div>
+  </div>
+
   <div class="panel">
     <h2>Welcome to the Fair</h2>
     <div class="name-form">
@@ -1137,6 +1190,14 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
       <button class="btn" onclick="submitName()">Enter the Fair →</button>
     </div>
   </div>
+
+  <!-- Credits footer -->
+  <div id="credits-footer" style="text-align:center;margin-top:1.2rem;padding:.8rem 1rem;border-top:1px solid rgba(160,112,40,.15);font-size:.72rem;color:rgba(200,184,136,.35);line-height:1.8">
+    <div style="font-family:'Cinzel',serif;letter-spacing:.1em;color:rgba(200,184,136,.5);margin-bottom:.3rem">NINE OILS</div>
+    <div>Game design &amp; development &nbsp;&middot;&nbsp; <span style="color:rgba(200,184,136,.55)">David Marques</span></div>
+    <div style="margin-top:.5rem;opacity:.5">v1.4 &nbsp;&middot;&nbsp; 2025</div>
+  </div>
+
 </div>
 
 <!-- ══ LOBBY SCREEN ══ -->
@@ -1193,6 +1254,10 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         <div id="dice-row"></div>
         <div id="combo-row"></div>
         <div class="btn-row" id="action-btns"></div>
+        <div id="deck-counter" style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:.3rem;opacity:.6;font-size:.72rem;font-family:'Cinzel',serif;letter-spacing:.07em;color:var(--cream-dark)">
+          <div id="deck-mini" style="display:flex;gap:2px;align-items:flex-end"></div>
+          <span id="deck-count-label">— cards</span>
+        </div>
       </div>
 
       <!-- Me -->
@@ -1418,6 +1483,12 @@ const DOTS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
 
 // ══ STATE ══════════════════════════════════════════════════
 let ws=null, myName='', myIdx=-1, state=null, lastDice=null;
+
+// ── Name persistence ────────────────────────────────────
+(function(){
+  const saved = localStorage.getItem('nineoils_name');
+  if(saved){ const inp=$('name-input'); if(inp) inp.value=saved; }
+})();
 let sessionToken=null;
 let reconnectAttempts=0, reconnectTimer=null, intentionalLeave=false;
 const MAX_RECONNECT=8, BASE_DELAY=1000;
@@ -1558,6 +1629,7 @@ function submitName(){
   const v=$('name-input').value.trim();
   if(!v){$('name-input').focus();return;}
   myName=v;
+  try{ localStorage.setItem('nineoils_name', myName); }catch(e){}
   $('lobby-name-display').textContent=myName;
   showScreen('screen-lobby');
   send({type:'LOBBIES'});
@@ -1642,6 +1714,7 @@ function renderGame(){
   $('status-box').textContent=s.status;
   pulseStatus(s.status);
   $('roll-explain').textContent=s.rollExplain?'You rolled: '+s.rollExplain:'';
+  renderDeckCounter(s);
   renderDice(s.dice,s.combos||[]);
   renderComboBadges(s.combos||[],s.status);
 
@@ -2088,7 +2161,21 @@ function renderComboBadges(combos, statusText){
 
 
 
-function bottleSVG(){return '<svg class="bottle-svg" viewBox="0 0 26 52" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="8" y="1" width="10" height="5.5" rx="2.5" fill="#17502a"/><rect x="9.5" y="6" width="7" height="3" rx="1" fill="#17502a"/><path d="M5.5 8.5 C3.5 15 3 21 3 27 C3 41 10.5 49.5 13 50.5 C15.5 49.5 23 41 23 27 C23 21 22.5 15 20.5 8.5 Z" fill="#2a7040"/><path d="M5.5 8.5 C3.5 15 3 21 3 27 C3 39 9 47 12 50" stroke="#3a9054" stroke-width="1.4" fill="none" opacity=".5"/><path d="M7.5 14 C6 19 5.5 24 6 27" stroke="rgba(255,255,255,.09)" stroke-width="1.2" fill="none"/></svg>';}
+function bottleSVG(){
+  // Original artwork: potion-svgrepo-com.svg (svgrepo.com) — adapted to 26×52px
+  return '<svg class="bottle-svg" width="26" height="52" viewBox="0 0 512 512" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">'
+    + '<polygon style="fill:#F58E42;" points="348.596,8.17 337.702,73.532 256,106.213 174.298,73.532 163.404,8.17"/>'
+    + '<path style="fill:#7B2FA8;" d="M413.957,236.936v234.213c0,17.974-14.706,32.681-32.681,32.681H130.723c-17.974,0-32.681-14.706-32.681-32.681V236.936c0-35.949,29.413-65.362,65.362-65.362V95.319h185.191v76.255C384.545,171.574,413.957,200.987,413.957,236.936z"/>'
+    + '<path style="fill:#5C1A85;" d="M348.596,73.532c9.02,0,16.34,7.321,16.34,16.34s-7.32,16.34-16.34,16.34H163.404c-9.02,0-16.34-7.321-16.34-16.34c0-4.51,1.83-8.595,4.793-11.547c2.952-2.963,7.037-4.793,11.547-4.793h10.894h163.404H348.596z"/>'
+    + '<polygon style="fill:#F1ECDE;" points="381.277,405.787 381.277,438.468 130.723,438.468 130.723,269.617 163.404,269.617 179.745,280.511 196.085,269.617 381.277,269.617 381.277,373.106 370.383,389.447"/>'
+    + '<circle style="fill:#A59D8C;" cx="312.778" cy="362.213" r="8.17"/>'
+    + '<circle style="fill:#A59D8C;" cx="285.543" cy="384" r="8.17"/>'
+    + '<circle style="fill:#A59D8C;" cx="199.212" cy="324.085" r="8.17"/>'
+    + '<path style="fill:#2a0840;" d="M356.766,163.855v-50.878c9.509-3.373,16.34-12.455,16.34-23.105c0-13.515-10.995-24.511-24.511-24.511h-1.248l9.308-55.848c0.394-2.369-0.272-4.792-1.825-6.624C353.278,1.057,350.998,0,348.596,0H163.404c-2.402,0-4.682,1.057-6.234,2.889c-1.552,1.832-2.22,4.255-1.825,6.624l9.308,55.848h-1.248c-13.516,0-24.511,10.996-24.511,24.511c0,10.651,6.831,19.733,16.34,23.105v50.878c-36.715,4.077-65.362,35.296-65.362,73.081v234.213c0,22.526,18.325,40.851,40.851,40.851h250.553c22.526,0,40.851-18.325,40.851-40.851V236.936C422.128,199.152,393.481,167.933,356.766,163.855z M173.049,16.34h165.902l-8.17,49.021H181.22L173.049,16.34z M405.787,471.149c0,13.515-10.995,24.511-24.511,24.511H130.723c-13.516,0-24.511-10.996-24.511-24.511V236.936c0-31.535,25.656-57.191,57.191-57.191c4.512,0,8.17-3.657,8.17-8.17v-57.191h24.511c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-32.681c-4.506,0-8.17-3.665-8.17-8.17s3.665-8.17,8.17-8.17h174.295c0.037,0,10.897,0,10.897,0c4.506,0,8.17,3.665,8.17,8.17s-3.665,8.17-8.17,8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17s3.658,8.17,8.17,8.17h111.66v57.191c0,4.513,3.658,8.17,8.17,8.17c31.536,0,57.191,25.657,57.191,57.191V471.149z"/>'
+    + '<path style="fill:#2a0840;" d="M196.085,179.745h119.83c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17S191.573,179.745,196.085,179.745z"/>'
+    + '<path style="fill:#2a0840;" d="M381.277,261.447H196.085c-1.612,0-3.19,0.477-4.532,1.373l-11.809,7.872l-11.809-7.873c-1.342-0.894-2.919-1.373-4.532-1.373h-32.681c-4.512,0-8.17,3.657-8.17,8.17v168.851c0,4.513,3.658,8.17,8.17,8.17h250.553c4.512,0,8.17-3.657,8.17-8.17v-32.681c0-1.612-0.477-3.191-1.373-4.532l-7.873-11.809l7.873-11.809c0.894-1.341,1.373-2.919,1.373-4.532V269.616C389.447,265.104,385.789,261.447,381.277,261.447z M373.106,370.632l-9.521,14.281c-1.83,2.745-1.83,6.319,0,9.064l9.521,14.282v22.039H138.894V277.787h22.037l14.283,9.521c2.745,1.83,6.319,1.83,9.064,0l14.283-9.521h174.547V370.632z"/>'
+    + '</svg>';
+}
 
 function $(id){return document.getElementById(id);}
 function setConn(s,l){$('conn-dot').className='conn-dot '+s;$('conn-label').textContent=l;}
@@ -2111,7 +2198,41 @@ initDice();
 connect();
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ══ ANIMATIONS ══════════════════════════════════════════════
+// ── Deck counter ─────────────────────────────────────────
+let _lastDeckRemaining = -1;
+function renderDeckCounter(s){
+  const total = s.deckCount || 0;
+  const remaining = s.deckRemaining !== undefined ? s.deckRemaining : total;
+  const lbl = $('deck-count-label');
+  const mini = $('deck-mini');
+  if(!lbl||!mini) return;
+
+  // Reshuffle animation: remaining was near 0, now jumped back up
+  if(_lastDeckRemaining >= 0 && _lastDeckRemaining <= 2 && remaining > 4){
+    mini.classList.add('deck-shuffling');
+    setTimeout(()=>mini.classList.remove('deck-shuffling'), 600);
+  }
+  _lastDeckRemaining = remaining;
+
+  lbl.textContent = remaining + ' card' + (remaining!==1?'s':'') + ' in deck';
+
+  // Mini card stack — show up to 5 cards visually
+  mini.innerHTML = '';
+  const shown = Math.min(5, Math.ceil(remaining / Math.max(1, total) * 5));
+  for(let i=0;i<shown;i++){
+    const c = document.createElement('div');
+    c.className = 'deck-card-mini';
+    c.style.transform = 'translateY(' + (-i*1.5) + 'px)';
+    c.style.opacity = remaining === 0 ? '0.2' : '1';
+    mini.appendChild(c);
+  }
+  if(remaining === 0){
+    lbl.textContent = 'Deck empty — reshuffling soon';
+    lbl.style.color = 'rgba(200,120,80,.6)';
+  } else {
+    lbl.style.color = '';
+  }
+}
 let lastStatusText = '';
 function pulseStatus(text){
   const el = $('status-box'); if(!el) return;
