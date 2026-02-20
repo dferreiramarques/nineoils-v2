@@ -484,6 +484,13 @@ function applyComboList(lobby,combos){
       else msgs.push('Double — deck empty');
     }
   }
+  // QUAD before TRIPLE_DOUBLE — freed slot must be available when bottle is placed
+  if(combos.includes('QUAD')){
+    g.stats[g.cur].combos.QUAD++;
+    const slot=p.stall.findIndex(s=>s===0);
+    if(slot>=0){p.stall[slot]=1;msgs.push(`Quad — slot ${slot+1} is now open!`);}
+    else msgs.push('Quad — all slots already open');
+  }
   if(combos.includes('TRIPLE_DOUBLE')){
     g.stats[g.cur].combos.TRIPLE_DOUBLE++;
     const total=1+g.temptCount;let placed=0;
@@ -496,12 +503,6 @@ function applyComboList(lobby,combos){
       :`Triple+Double — no free slots available`);
   }
   g.temptCount=0;
-  if(combos.includes('QUAD')){
-    g.stats[g.cur].combos.QUAD++;
-    const slot=p.stall.findIndex(s=>s===0);
-    if(slot>=0){p.stall[slot]=1;msgs.push(`Quad — slot ${slot+1} is now open!`);}
-    else msgs.push('Quad — all slots already open');
-  }
   if(combos.includes('PENTA')){
     g.stats[g.cur].combos.PENTA++;
     opp.hand.forEach(c=>trash(g,c));opp.hand=[];
