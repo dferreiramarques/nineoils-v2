@@ -222,14 +222,24 @@ function handleAction(ws,msg){
       broadcastGame(lobby); break;
 
     case 'ROLL':
-      if(g.cur!==seat||g.phase!=='CARD_PLAY')return;
+      if(g.cur!==seat||g.phase!=='CARD_PLAY'){
+        // Resync client — state mismatch after reconnect
+        if(lobby.players[seat]) sendTo(lobby.players[seat],{type:'GAME_STATE',state:buildView(g,seat)});
+        return;
+      }
       processCardPlays(lobby); break;
 
     case 'CONTINUE':
-      if(g.cur!==seat||g.phase!=='ROLL_PAUSE')return;
+      if(g.cur!==seat||g.phase!=='ROLL_PAUSE'){
+        if(lobby.players[seat]) sendTo(lobby.players[seat],{type:'GAME_STATE',state:buildView(g,seat)});
+        return;
+      }
       resolvePausedRoll(lobby); break;
 
-    case 'CHOOSE_COMBO':
+    case 'REQUEST_STATE':
+      if(lobby.game && lobby.players[seat])
+        sendTo(lobby.players[seat],{type:'GAME_STATE',state:buildView(g,seat)});
+      break;
       if(g.cur!==seat||g.phase!=='CHOOSE_COMBO')return;
       resolveChosenCombo(lobby,msg.combo); break;
 
@@ -699,7 +709,15 @@ wss.on('connection',(ws,req)=>{
       const other=lobby.players[1-sess.seat];
       if(other) sendTo(other,{type:'OPPONENT_RECONNECTED',name:sess.name});
       // Restore game state
-      if(lobby.game) broadcastGame(lobby);
+      if(lobby.game) {
+        broadcastGame(lobby);
+        // Solo: if bot's turn is active but possibly stuck, reschedule (turnGen check prevents double-fire)
+        const g2=lobby.game;
+        if(g2.isSolo && g2.cur===1 && g2.winnerIdx===null &&
+           (g2.phase==='CARD_PLAY'||g2.phase==='CHOOSE_COMBO'||g2.phase==='DISCARD')){
+          scheduleBotTurn(lobby, 2000);
+        }
+      }
       else sendTo(ws,{type:'LOBBIES',lobbies:lobbyList()});
       return;
     }
@@ -1544,8 +1562,11 @@ function handleMsg(msg){
 
     case 'RECONNECTED':
       myIdx=msg.seat;
+      lastDice=null; // clear stale dice so next render shows correctly
       hideReconnectBanner(true);
       setConn('ok','Reconnected');
+      // Request a fresh state after bot timers may have settled
+      setTimeout(()=>send({type:'REQUEST_STATE'}), 800);
       // Game state will arrive via GAME_STATE shortly
       break;
 
@@ -1922,7 +1943,23 @@ function renderButtons(s){
   if(s.phase==='CARD_PLAY'){
     const b=document.createElement('button');
     b.className='btn';b.textContent=s.sel.length?'✔ Confirm Cards & Roll':'🎲 Roll Dice';
-    b.onclick=()=>{ SFX.click(); send({type:'ROLL'}); };el.appendChild(b);
+    b.onclick=()=>{
+      SFX.click();
+      b.disabled=true;
+      b.textContent='Rolling…';
+      b.style.opacity='.6';
+      send({type:'ROLL'});
+      // Safety resync: if server doesn't respond in 3s, re-enable and request fresh state
+      setTimeout(()=>{
+        if(b.disabled){
+          b.disabled=false;
+          b.style.opacity='';
+          b.textContent='🎲 Roll Dice';
+          send({type:'REQUEST_STATE'});
+        }
+      }, 3000);
+    };
+    el.appendChild(b);
     if(s.sel.length){
       const c=document.createElement('button');c.className='btn danger sm';c.textContent='✕ Clear';
       c.onclick=()=>[...s.sel].forEach(i=>send({type:'SELECT_CARD',idx:i}));el.appendChild(c);
