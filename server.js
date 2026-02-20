@@ -246,15 +246,6 @@ function handleAction(ws,msg){
       g.status=`${g.players[g.cur].name} blindly picks a card from ${g.players[1-g.cur].name}'s hand!`;
       rollAndResolve(lobby); break;
 
-    case 'CHAT':
-      if(!msg.text||typeof msg.text!=='string')return;
-      const txt=msg.text.trim().slice(0,120); if(!txt)return;
-      const sender=lobby.names[seat]||('Player '+(seat+1));
-      // Broadcast chat to both players at this table
-      for(const [cws,cst] of wsState){
-        if(cst.lobbyId===st.lobbyId) sendTo(cws,{type:'CHAT',name:sender,text:txt,seat});
-      }
-      return;
 
     case 'DISCARD':
       if(g.phase!=='DISCARD'||seat!==g.cur)return;
@@ -896,22 +887,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .dot{width:7px;height:7px;background:#1a0f00;border-radius:50%;margin:auto;box-shadow:0 1px 2px rgba(0,0,0,.35)}
 .dot.off{visibility:hidden}
 /* Combo result cards */
-/* ── CHAT PANEL ── */
-#chat-panel{display:flex;flex-direction:column;background:linear-gradient(160deg,#1e1208,#140e05);border:1.5px solid var(--border);border-radius:11px;overflow:hidden}
-#chat-log{height:110px;overflow-y:auto;padding:.5rem .75rem;display:flex;flex-direction:column;gap:.3rem;font-size:.78rem}
-#chat-log::-webkit-scrollbar{width:3px}
-#chat-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.chat-msg{line-height:1.4;word-break:break-word}
-.chat-msg .chat-name{font-family:'Cinzel',serif;font-size:.68rem;letter-spacing:.06em}
-.chat-msg.mine .chat-name{color:var(--gold)}
-.chat-msg.theirs .chat-name{color:#7abcef}
-.chat-msg .chat-text{color:var(--cream-dark)}
-.chat-msg.system{font-style:italic;color:rgba(200,184,136,.35);font-size:.74rem;text-align:center}
-#chat-input-row{display:flex;border-top:1px solid rgba(140,95,30,.22)}
-#chat-input{flex:1;background:transparent;border:none;padding:.42rem .6rem;font-family:'IM Fell English',serif;font-style:italic;font-size:.82rem;color:var(--cream);outline:none}
-#chat-input::placeholder{color:rgba(200,184,136,.28)}
-#chat-send{background:transparent;border:none;border-left:1px solid rgba(140,95,30,.22);padding:.42rem .65rem;color:var(--gold);cursor:pointer;font-size:.88rem;transition:color .15s}
-#chat-send:hover{color:var(--gold-light)}
+
 
 /* ── DICE ROLL ANIMATION ── */
 @keyframes dieFlip{0%{transform:rotateY(0) scale(1)}25%{transform:rotateY(90deg) scale(1.1)}50%{transform:rotateY(180deg) scale(1.04)}75%{transform:rotateY(270deg) scale(1.07)}100%{transform:rotateY(360deg) scale(1)}}
@@ -1246,17 +1222,6 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
   </div><!-- /game-layout -->
 
-  <!-- Chat: full width below the game layout -->
-  <div style="max-width:1220px;margin:.5rem auto 0">
-    <div id="chat-panel">
-      <div id="chat-log"><div class="chat-msg system">The fair is open. Good luck!</div></div>
-      <div id="chat-input-row">
-        <input id="chat-input" type="text" maxlength="120" placeholder="Say something…" autocomplete="off">
-        <button id="chat-send" onclick="sendChat()" title="Send">➤</button>
-      </div>
-    </div>
-  </div>
-
 </div><!-- /screen-game -->
 
 <!-- OVERLAYS -->
@@ -1481,9 +1446,6 @@ function handleMsg(msg){
       $('waiting-text').textContent=msg.name+' has joined! Starting…';
       break;
 
-    case 'CHAT':
-      appendChat(msg.name, msg.text, msg.seat);
-      break;
 
     case 'GAME_STATE':
       state=msg.state; myIdx=msg.state.myIdx;
@@ -2031,38 +1993,7 @@ function hideReconnectBanner(fully){
 
 initDice();
 connect();
-// ══ CHAT ═══════════════════════════════════════════════════
-let mySeat = null; // set when we receive first STATE
-function appendChat(name, text, seat){
-  const log = $('chat-log'); if(!log) return;
-  const div = document.createElement('div');
-  const isMine = (seat === mySeat);
-  div.className = 'chat-msg ' + (isMine ? 'mine' : 'theirs');
-  div.innerHTML = '<span class="chat-name">'+escHtml(name)+'</span> <span class="chat-text">'+escHtml(text)+'</span>';
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-function appendChatSystem(text){
-  const log = $('chat-log'); if(!log) return;
-  const div = document.createElement('div');
-  div.className = 'chat-msg system';
-  div.textContent = text;
-  log.appendChild(div);
-  log.scrollTop = log.scrollHeight;
-}
-function sendChat(){
-  const inp = $('chat-input'); if(!inp) return;
-  const txt = inp.value.trim(); if(!txt) return;
-  send({type:'CHAT', text: txt});
-  inp.value = '';
-}
 function escHtml(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-// Enable Enter key in chat input
-document.addEventListener('DOMContentLoaded',()=>{
-  const inp = $('chat-input');
-  if(inp) inp.addEventListener('keydown', e=>{ if(e.key==='Enter') sendChat(); });
-});
 
 // ══ ANIMATIONS ══════════════════════════════════════════════
 let lastStatusText = '';
