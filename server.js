@@ -140,6 +140,7 @@ function newGame(nameA,nameB,isSolo){
     winnerIdx:null,
     isSolo:!!isSolo,
     stats:[newStats(),newStats()],
+    turnGen:0,
   };
   const c0=dealCard(g);if(c0)g.players[0].hand.push(c0);
   const c1=dealCard(g);if(c1)g.players[1].hand.push(c1);
@@ -193,7 +194,7 @@ function handleAction(ws,msg){
     const lobby2=lobbies[st.lobbyId]; if(!lobby2)return;
     lobby2.game=newGame(lobby2.names[0],lobby2.solo?'The Peddler':lobby2.names[1],lobby2.solo);
     broadcastGame(lobby2);
-    if(lobby2.solo&&lobby2.game.cur===1) setTimeout(()=>botTurn(lobby2),1800);
+    if(lobby2.solo&&lobby2.game&&lobby2.game.cur===1) scheduleBotTurn(lobby2,1800);
     return;
   }
   if(!g||g.winnerIdx!==null)return;
@@ -327,10 +328,10 @@ function rollAndResolve(lobby){
     g.status=`${g.players[g.cur].name} rolled — no combos. Continue to end turn.`;
   }
   broadcastGame(lobby);
-  // Bot handles ROLL_PAUSE via botTurn() called from endTurn
+  // Bot auto-continues through ROLL_PAUSE — human must click Continue
   if(g.isSolo&&g.cur===1){
-    const gen=g.turnGen||0;
-    setTimeout(()=>{ if(g.turnGen===gen&&g.phase==='ROLL_PAUSE') resolvePausedRoll(lobby); },2000);
+    const gen=g.turnGen;
+    setTimeout(()=>{ if(g.turnGen===gen&&g.cur===1&&g.phase==='ROLL_PAUSE') resolvePausedRoll(lobby); },2200);
   }
 }
 
@@ -346,10 +347,7 @@ function resolvePausedRoll(lobby){
     g.combos=[];
     g.status=`${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     broadcastGame(lobby);
-    if(g.isSolo&&g.cur===1){
-      const gen=g.turnGen||0;
-      setTimeout(()=>{ if(g.turnGen===gen&&g.cur===1) botTurn(lobby); },1000);
-    }
+    if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1000);
   } else {
     g.comboOptions=null;
     applyComboList(lobby,analysis.combos);
@@ -413,7 +411,7 @@ function applyComboList(lobby,combos){
   if(p.hand.length>3){
     g.phase='DISCARD';
     broadcastGame(lobby);
-    if(g.isSolo&&g.cur===1) setTimeout(()=>botTurn(lobby),1000);
+    if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1000);
     return;
   }
   endTurn(g,lobby);
@@ -431,59 +429,58 @@ function describeRoll(dice){
 function endTurn(g,lobby){
   g.stats[g.cur].turns++;
   g.cur=1-g.cur;g.phase='CARD_PLAY';g.sel=[];g.combos=[];g.comboOptions=null;g.rollExplain='';
-  g.turnGen=(g.turnGen||0)+1; // increment every turn to cancel stale bot timeouts
+  g.turnGen++;
   g.status=`${g.players[g.cur].name}'s turn — play cards or roll the dice.`;
   broadcastGame(lobby);
-  // If next player is bot, schedule bot turn
-  if(g.isSolo&&g.cur===1){
-    const gen=g.turnGen;
-    setTimeout(()=>{ if(g.turnGen===gen) botTurn(lobby); },1600);
-  }
+  if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1600);
+}
+
+// Single entry point for all bot scheduling — always checks cur===1 and turnGen
+function scheduleBotTurn(lobby,delay){
+  const g=lobby.game;
+  const gen=g.turnGen;
+  setTimeout(()=>{
+    if(!g||g.turnGen!==gen||g.cur!==1||!g.isSolo||g.winnerIdx!==null)return;
+    botTurn(lobby);
+  }, delay||1400);
 }
 
 // ─── BOT AI ──────────────────────────────────────────────
 function botTurn(lobby){
   const g=lobby.game;
+  // Hard safety check — never run bot logic on human's turn
   if(!g||g.winnerIdx!==null||g.cur!==1||!g.isSolo)return;
-  const gen=g.turnGen||0; // snapshot — if turn changes, these callbacks abort
-  function guard(fn,delay){
-    setTimeout(()=>{ if(g.turnGen===gen&&g.cur===1&&!g.winnerIdx) fn(); },delay);
-  }
+
   if(g.phase==='CARD_PLAY'){
     const bot=g.players[1], opp=g.players[0];
     g.sel=[];
-    // Play Temptress cards (always beneficial)
     bot.hand.forEach((c,i)=>{ if(c==='TEMPTRESS') g.sel.push(i); });
-    // Play Boy if opponent has bottles
     if(!g.sel.length){
       const boyIdx=bot.hand.indexOf('BOY');
       if(boyIdx>=0&&opp.stall.some(s=>s===2)) g.sel.push(boyIdx);
     }
     broadcastGame(lobby);
-    guard(()=>{ if(g.phase==='CARD_PLAY') processCardPlays(lobby); }, 1400);
-  } else if(g.phase==='CHOOSE_COMBO'){
+    const gen=g.turnGen;
+    setTimeout(()=>{
+      if(g.turnGen!==gen||g.cur!==1||g.phase!=='CARD_PLAY')return;
+      processCardPlays(lobby);
+    },1400);
+    return;
+  }
+  if(g.phase==='CHOOSE_COMBO'){
     const order=['TRIPLE_DOUBLE','QUAD','PENTA'];
     const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
-    guard(()=>{ if(g.phase==='CHOOSE_COMBO') resolveChosenCombo(lobby,choice); }, 800);
-  } else if(g.phase==='ROLL_PAUSE'){
-    guard(()=>{ if(g.phase==='ROLL_PAUSE') resolvePausedRoll(lobby); }, 2000);
-  } else if(g.phase==='BLIND_PICK'){
-    const opp=g.players[0];
-    if(opp.hand.length>0){
-      const idx=Math.floor(Math.random()*opp.hand.length);
-      guard(()=>{
-        if(g.phase==='BLIND_PICK'){
-          trash(g,opp.hand.splice(idx,1)[0]);
-          g.status=`The Peddler blindly picks a card from ${g.players[0].name}'s hand!`;
-          rollAndResolve(lobby);
-        }
-      }, 1200);
-    } else {
-      rollAndResolve(lobby);
-    }
-  } else if(g.phase==='DISCARD'){
-    guard(()=>{
-      if(g.phase!=='DISCARD') return;
+    const gen=g.turnGen;
+    setTimeout(()=>{
+      if(g.turnGen!==gen||g.cur!==1||g.phase!=='CHOOSE_COMBO')return;
+      resolveChosenCombo(lobby,choice);
+    },900);
+    return;
+  }
+  if(g.phase==='DISCARD'){
+    const gen=g.turnGen;
+    setTimeout(()=>{
+      if(g.turnGen!==gen||g.cur!==1||g.phase!=='DISCARD')return;
       const p=g.players[1];
       if(p.hand.length<=3){endTurn(g,lobby);return;}
       const priority={'BULLY':3,'BOY':2,'TEMPTRESS':1};
@@ -494,8 +491,9 @@ function botTurn(lobby){
       });
       trash(g,p.hand.splice(discardIdx,1)[0]);
       if(p.hand.length<=3) endTurn(g,lobby);
-      else{broadcastGame(lobby);botTurn(lobby);}
-    }, 800);
+      else{ broadcastGame(lobby); botTurn(lobby); }
+    },900);
+    return;
   }
 }
 
@@ -597,7 +595,7 @@ wss.on('connection',(ws,req)=>{
         broadcastGame(lobby);
         broadcastLobbies();
         // If bot goes first, schedule its turn
-        if(lobby.game.cur===1) setTimeout(()=>botTurn(lobby),1800);
+        if(lobby.game&&lobby.game.isSolo&&lobby.game.cur===1) scheduleBotTurn(lobby,1800);
       } else {
         if(lobby.players[1-seat]) sendTo(lobby.players[1-seat],{type:'OPPONENT_JOINED',name:lobby.names[seat]});
         if(lobby.players[0]&&lobby.players[1]){
