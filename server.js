@@ -894,15 +894,34 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 
 /* ── GAME LAYOUT ── */
 #screen-game{padding:.4rem .5rem}
-.game-layout{display:flex;gap:.6rem;align-items:flex-start;max-width:1220px;margin:0 auto}
+.game-layout{display:flex;gap:.6rem;align-items:flex-start;max-width:820px;margin:0 auto}
 .game-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:.5rem}
 
-/* ── RULES SIDEBAR ── */
-.rules-sidebar{width:460px;flex-shrink:0;background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;padding:1rem 1.2rem;font-size:.88rem;line-height:1.6;display:flex;flex-direction:column;gap:.7rem;position:sticky;top:.5rem;max-height:calc(100vh - 80px);overflow-y:auto}
-.rules-sidebar::-webkit-scrollbar{width:4px}
-.rules-sidebar::-webkit-scrollbar-track{background:transparent}
-.rules-sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.rules-sidebar h3{font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold-light);letter-spacing:.12em;margin-bottom:.3rem}
+/* ── PLAYER AREA: stall left, hand right ── */
+.player-body{display:flex;gap:.7rem;align-items:flex-start}
+.stall{display:flex;gap:.42rem;flex-wrap:wrap;flex:0 0 auto}
+.hand-col{display:flex;flex-direction:column;gap:.3rem;flex:1;min-width:0}
+
+/* ── RULES ACCORDION (below game) ── */
+.rules-accordion{background:linear-gradient(160deg,#221408,#180e05);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;margin-top:.1rem}
+.rules-accordion-toggle{width:100%;background:none;border:none;cursor:pointer;padding:.55rem 1rem;display:flex;align-items:center;justify-content:space-between;font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold-light);letter-spacing:.1em}
+.rules-accordion-toggle:hover{background:rgba(255,255,255,.03)}
+.rules-accordion-caret{font-size:.7rem;transition:transform .25s;color:var(--gold);opacity:.7}
+.rules-accordion.open .rules-accordion-caret{transform:rotate(180deg)}
+.rules-accordion-body{display:none;padding:.2rem 1rem .8rem;font-size:.82rem;line-height:1.6}
+.rules-accordion.open .rules-accordion-body{display:block}
+.rules-cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.rules-section{padding-top:.55rem;border-top:1px solid rgba(160,112,40,.2)}
+.rules-section:first-child{border-top:none;padding-top:0}
+.rules-section h3{font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold-light);letter-spacing:.12em;margin-bottom:.35rem}
+.combo-entry{margin-bottom:.45rem}
+.combo-name{font-family:'Cinzel',serif;font-size:.65rem;color:var(--cream);letter-spacing:.07em}
+.combo-dice{font-size:.7rem;color:var(--cream-dark)}
+.combo-effect{font-size:.72rem;color:var(--green-light);font-style:italic}
+.card-rule{margin-bottom:.55rem}
+.card-rule-name{font-family:'Cinzel',serif;font-size:.7rem;color:var(--gold-light);margin-bottom:.15rem}
+.card-rule-text{font-size:.72rem;color:var(--cream-dark);line-height:1.45}/* ── RULES SIDEBAR ── */
+.rules-section h3{font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold-light);letter-spacing:.12em;margin-bottom:.3rem}
 .rules-section{border-top:1px solid rgba(160,112,40,.2);padding-top:.55rem}
 .rules-section:first-child{border-top:none;padding-top:0}
 .combo-entry{margin-bottom:.5rem}
@@ -931,7 +950,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .pname{font-family:'Cinzel',serif;font-size:.88rem;color:var(--gold-light);font-weight:600;letter-spacing:.1em;display:flex;align-items:center;gap:.35rem}
 .you-tag{font-size:.62rem;background:rgba(212,168,67,.12);border:1px solid rgba(212,168,67,.28);border-radius:4px;padding:.08rem .4rem;letter-spacing:.07em}
 .supply-info{font-size:.82rem;color:var(--cream-dark);font-style:italic}
-.stall{display:flex;gap:.42rem;flex-wrap:wrap;margin-bottom:.6rem}
+.stall{display:flex;gap:.42rem;flex-wrap:wrap;flex:0 0 auto}
 .stall-slot{width:52px;height:74px;border:2px dashed rgba(140,95,30,.35);border-radius:8px;background:rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:all .3s}
 .stall-slot.blocked{border:2px solid var(--red);background:rgba(90,20,20,.15)}
 .stall-slot.filled{border:2px solid var(--green);background:rgba(30,80,45,.2);box-shadow:inset 0 0 9px rgba(40,100,60,.2)}
@@ -1086,25 +1105,20 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
   .game-layout{flex-direction:column;gap:.4rem}
   .game-main{gap:.35rem}
 
-  /* Rules sidebar → compact accordion on mobile */
-  .rules-sidebar{
-    width:100%;position:static;max-height:none;
-    flex-direction:column;gap:0;
-    padding:.5rem .7rem;order:99
-  }
-  .rules-sidebar .rules-section{padding:.45rem 0;border-top:1px solid rgba(160,112,40,.2)}
-  .rules-sidebar .rules-section:first-child{border-top:none}
+  /* Rules accordion on mobile — single column */
+  .rules-cols{grid-template-columns:1fr}
 
   /* Player areas */
   .player-area{padding:.6rem .7rem .5rem}
   .pname{font-size:.82rem}
   .supply-info{font-size:.75rem}
 
-  /* Stall — bigger slots on mobile */
-  .stall{gap:.3rem}
-  .stall-slot{width:48px;height:68px}
-  .red-cube{width:28px;height:28px}
-  .bottle-svg{width:22px;height:44px}
+  /* Stall + hand inline: smaller slots on mobile to fit side by side */
+  .player-body{gap:.5rem}
+  .stall{gap:.25rem}
+  .stall-slot{width:44px;height:62px}
+  .red-cube{width:26px;height:26px}
+  .bottle-svg{width:20px;height:40px}
 
   /* Center / dice area */
   #center{padding:.6rem .5rem;gap:.4rem}
@@ -1126,11 +1140,11 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
   .combo-effect{font-size:.72rem}
 
   /* Cards — bigger touch targets */
-  .card{width:72px;height:100px;border-radius:8px}
-  .card-icon{font-size:1.7rem}
-  .card-name{font-size:.54rem;margin-top:4px}
-  .card-desc-short{font-size:.44rem}
-  .hand-cards{gap:.35rem;min-height:72px}
+  .card{width:64px;height:90px;border-radius:8px}
+  .card-icon{font-size:1.6rem}
+  .card-name{font-size:.5rem;margin-top:4px}
+  .card-desc-short{font-size:.42rem}
+  .hand-cards{gap:.3rem;min-height:64px}
   .card-info-btn{width:16px;height:16px;font-size:.55rem}
 
   /* Buttons — full width on mobile */
@@ -1161,9 +1175,9 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 }
 
 @media(max-width:380px){
-  .stall-slot{width:42px;height:60px}
+  .stall-slot{width:38px;height:54px}
   .die{width:44px;height:44px}
-  .card{width:64px;height:90px}
+  .card{width:58px;height:82px}
 }
 </style>
 </head>
@@ -1231,8 +1245,6 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 <!-- ══ GAME SCREEN ══ -->
 <div class="screen" id="screen-game">
   <div class="game-layout">
-
-    <!-- Main game column -->
     <div class="game-main">
 
       <!-- Opponent -->
@@ -1241,10 +1253,13 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
           <span class="pname" id="opp-name-label">Opponent</span>
           <span class="supply-info">Supply: <span id="opp-supply">6</span></span>
         </div>
-        <div class="stall" id="opp-stall"></div>
-        <div class="gold-line"></div>
-        <div class="hand-header">Opponent's Hand</div>
-        <div class="hand-cards" id="opp-hand"></div>
+        <div class="player-body">
+          <div class="stall" id="opp-stall"></div>
+          <div class="hand-col">
+            <div class="hand-header">Their Hand</div>
+            <div class="hand-cards" id="opp-hand"></div>
+          </div>
+        </div>
       </div>
 
       <!-- Center / Dice -->
@@ -1266,115 +1281,66 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
           <span class="pname" id="my-name-label">You <span class="you-tag">YOU</span></span>
           <span class="supply-info">Supply: <span id="my-supply">6</span></span>
         </div>
-        <div class="stall" id="my-stall"></div>
-        <div class="gold-line"></div>
-        <div class="hand-header">Your Hand</div>
-        <div class="hand-cards" id="my-hand"></div>
+        <div class="player-body">
+          <div class="stall" id="my-stall"></div>
+          <div class="hand-col">
+            <div class="hand-header">Your Hand</div>
+            <div class="hand-cards" id="my-hand"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rules Accordion -->
+      <div class="rules-accordion" id="rules-accordion">
+        <button class="rules-accordion-toggle" onclick="toggleRules()">
+          <span>📖 RULES &amp; REFERENCE</span>
+          <span class="rules-accordion-caret">▼</span>
+        </button>
+        <div class="rules-accordion-body">
+          <div class="rules-cols">
+            <div>
+              <div class="rules-section">
+                <h3>🎯 Objective</h3>
+                <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
+                  Fill all <strong style="color:var(--cream)">6 slots</strong> in your stall with bottles. First to do it wins!
+                </div>
+              </div>
+              <div class="rules-section">
+                <h3>🎲 Dice Combos</h3>
+                <div class="combo-entry"><div class="combo-name">DOUBLE</div><div class="combo-dice">Any 2 matching dice</div><div class="combo-effect">→ Draw 1 card</div></div>
+                <div class="combo-entry"><div class="combo-name">TRIPLE + DOUBLE</div><div class="combo-dice">3 of one + 2 of another</div><div class="combo-effect">→ Stock 1 bottle</div></div>
+                <div class="combo-entry"><div class="combo-name">QUAD</div><div class="combo-dice">4 of the same</div><div class="combo-effect">→ Remove 1 cube</div></div>
+                <div class="combo-entry"><div class="combo-name">PENTA</div><div class="combo-dice">5 of the same</div><div class="combo-effect">→ Opponent discards hand</div></div>
+                <div class="combo-entry"><div class="combo-name">SIX</div><div class="combo-dice">6 of the same</div><div class="combo-effect">→ Draw 3 cards</div></div>
+                <div class="combo-entry"><div class="combo-name" style="color:#e8c84a">JOKER</div><div class="combo-dice">7 of the same</div><div class="combo-effect">→ Choose any previous combo</div></div>
+                <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem"><div class="combo-name" style="color:#e8c84a">EIGHT</div><div class="combo-dice">8 of the same</div><div class="combo-effect">→ Remove 2 cubes</div></div>
+                <div class="combo-entry"><div class="combo-name" style="color:#e8c84a">NINE</div><div class="combo-dice">All 9 the same</div><div class="combo-effect">→ Instant win!</div></div>
+                <div style="font-size:.71rem;color:var(--cream-dark);margin-top:.5rem;padding-top:.4rem;border-top:1px solid rgba(160,112,40,.2);line-height:1.45"><strong style="color:var(--cream)">Rule:</strong> One combo per face value per roll.</div>
+              </div>
+            </div>
+            <div>
+              <div class="rules-section">
+                <h3>🃏 Your Turn</h3>
+                <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.5">1. Play any cards (optional)<br>2. Roll all 9 dice<br>3. Resolve all combos<br>4. Discard to 3 cards max</div>
+              </div>
+              <div class="rules-section">
+                <h3>👤 Characters</h3>
+                <div class="card-rule"><div class="card-rule-name">💃 The Temptress</div><div class="card-rule-text">Play before rolling. +1 bottle on Triple+Double. Two Temptresses = +2.</div></div>
+                <div class="card-rule"><div class="card-rule-name">🤏 The Boy</div><div class="card-rule-text">Steals 1 bottle per card. Each Bully blocks 1 Boy.<br><span style="color:var(--cream-dark);font-size:.72rem">• 2 Boys vs 1 Bully → 1 stolen<br>• 2 Boys vs 0 Bullies → 2 stolen<br>• 1 Boy vs 1 Bully → blocked</span></div></div>
+                <div class="card-rule"><div class="card-rule-name">👊 The Bully (I)</div><div class="card-rule-text">On opponent's turn — cancel one Boy attack.</div></div>
+                <div class="card-rule"><div class="card-rule-name">👊 The Bully (II)</div><div class="card-rule-text">Play 2 Bullies on your turn — blindly discard 1 opponent card.</div></div>
+              </div>
+              <div class="rules-section">
+                <h3>⚔️ Conflicts</h3>
+                <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">Same face → multiple combos? Choose one. Remaining dice of that face are discarded. No cascading.</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
     </div><!-- /game-main -->
-
-    <!-- Right column: rules only -->
-    <div class="rules-sidebar" style="width:460px;position:sticky;top:.5rem;max-height:calc(100vh - 80px)">
-      <div class="rules-section">
-        <h3>🎯 Objective</h3>
-        <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
-          Fill all <strong style="color:var(--cream)">6 slots</strong> in your stall with green bottles. First to do it wins!
-        </div>
-      </div>
-
-      <div class="rules-section">
-        <h3>🎲 Dice Combos</h3>
-        <div class="combo-entry">
-          <div class="combo-name">DOUBLE</div>
-          <div class="combo-dice">Any 2 matching dice</div>
-          <div class="combo-effect">→ Draw 1 card</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name">TRIPLE + DOUBLE</div>
-          <div class="combo-dice">3 of one + 2 of another</div>
-          <div class="combo-effect">→ Stock 1 bottle</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name">QUAD</div>
-          <div class="combo-dice">4 of the same</div>
-          <div class="combo-effect">→ Remove 1 cube</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name">PENTA</div>
-          <div class="combo-dice">5 of the same</div>
-          <div class="combo-effect">→ Opponent discards hand</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name">SIX</div>
-          <div class="combo-dice">6 of the same</div>
-          <div class="combo-effect">→ Draw 3 cards</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name" style="color:#e8c84a">JOKER</div>
-          <div class="combo-dice">7 of the same</div>
-          <div class="combo-effect">→ Choose any previous combo</div>
-        </div>
-        <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem">
-          <div class="combo-name" style="color:#e8c84a">EIGHT</div>
-          <div class="combo-dice">8 of the same</div>
-          <div class="combo-effect">→ Remove 2 cubes</div>
-        </div>
-        <div class="combo-entry">
-          <div class="combo-name" style="color:#e8c84a">NINE</div>
-          <div class="combo-dice">All 9 the same</div>
-          <div class="combo-effect">→ Instant win!</div>
-        </div>
-        <div style="font-size:.71rem;color:var(--cream-dark);margin-top:.5rem;padding-top:.4rem;border-top:1px solid rgba(160,112,40,.2);line-height:1.45">
-          <strong style="color:var(--cream)">Rule:</strong> One combo per face value per roll.
-        </div>
-      </div>
-
-      <div class="rules-section">
-        <h3>🃏 Your Turn</h3>
-        <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.5">
-          1. Play any cards (optional)<br>
-          2. Roll all 9 dice<br>
-          3. Resolve all combos<br>
-          4. Discard to 3 cards max
-        </div>
-      </div>
-
-      <div class="rules-section">
-        <h3>👤 Characters</h3>
-        <div class="card-rule">
-          <div class="card-rule-name">💃 The Temptress</div>
-          <div class="card-rule-text">Play before rolling. Adds +1 bottle on a Triple+Double. Two Temptresses = +2 bottles.</div>
-        </div>
-        <div class="card-rule">
-          <div class="card-rule-name">🤏 The Boy</div>
-          <div class="card-rule-text">Each Boy steals 1 bottle. Each Bully blocks 1 Boy.<br>
-          <span style="color:var(--cream-dark);font-size:.72rem">
-            • 2 Boys vs 1 Bully → 1 stolen, 1 blocked<br>
-            • 2 Boys vs 0 Bullies → 2 stolen<br>
-            • 1 Boy vs 1 Bully → fully blocked
-          </span></div>
-        </div>
-        <div class="card-rule">
-          <div class="card-rule-name">👊 The Bully (I)</div>
-          <div class="card-rule-text">Play on opponent's turn to cancel a Boy attack.</div>
-        </div>
-        <div class="card-rule">
-          <div class="card-rule-name">👊 The Bully (II)</div>
-          <div class="card-rule-text">Play 2 Bullies on your turn — blindly discard 1 card from opponent's hand.</div>
-        </div>
-      </div>
-
-      <div class="rules-section">
-        <h3>⚔️ Conflicts</h3>
-        <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
-          When dice of the same face qualify for multiple combos, you choose which one to activate. The remaining dice of that face are discarded — no cascading.
-        </div>
-      </div>
-    </div><!-- /rules-sidebar -->
-
   </div><!-- /game-layout -->
-
 </div><!-- /screen-game -->
 
 <!-- OVERLAYS -->
@@ -1545,6 +1511,22 @@ function scheduleReconnect(){
 }
 
 function send(msg){if(ws&&ws.readyState===1)ws.send(JSON.stringify(msg));}
+
+// ── Rules accordion ─────────────────────────────────────
+function toggleRules(){
+  const el=document.getElementById('rules-accordion');
+  if(el) el.classList.toggle('open');
+}
+
+// ── Reconnect on page visibility restore (fixes mobile scroll disconnect) ──
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'){
+    if(!ws||ws.readyState===WebSocket.CLOSED||ws.readyState===WebSocket.CLOSING){
+      reconnectAttempts=0;
+      connect();
+    }
+  }
+});
 
 // ══ MESSAGES ═══════════════════════════════════════════════
 function handleMsg(msg){
