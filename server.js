@@ -56,72 +56,73 @@ function deleteLobby(id){
 function freeSeat(lobby){ if(!lobby.players[0])return 0; if(!lobby.players[1])return 1; return -1; }
 
 // ─── COMBO DETECTION ────────────────────────────────────
-function analyseRoll(dice) {
+
+// Enumerate every valid combo bundle a player can choose from a roll.
+// Rule: each face value contributes to at most ONE combo.
+// Returns array of sorted combo-string arrays, deduplicated by effect.
+function enumerateComboBundles(dice){
   const freq={};
   dice.forEach(d=>freq[d]=(freq[d]||0)+1);
-  const entries=Object.entries(freq).map(([v,c])=>({v:+v,c})).sort((a,b)=>b.c-a.c);
-  const max=entries[0]?.c||0;
+  const faces=Object.keys(freq).map(Number).sort((a,b)=>freq[b]-freq[a]);
 
-  // ── INSTANT WIN: 9 of a kind ──────────────────────────
-  if(max===9) return {conflict:false, special:'INSTANT_WIN', combos:['INSTANT_WIN'], freq};
+  const seen=new Set();
+  const bundles=[];
 
-  // ── DOUBLE_QUAD: 8 of a kind — removes 2 cubes ───────
-  if(max===8) return {conflict:false, special:'DOUBLE_QUAD', combos:['DOUBLE_QUAD'], freq};
-
-  // ── JOKER: exactly 7 of a kind — choose any combo ────
-  if(max===7) return {
-    conflict:true, special:'JOKER',
-    primary:['DOUBLE','TRIPLE_DOUBLE','QUAD','PENTA'],
-    hasDouble:false, freq
-  };
-
-  // ── SIX OF A KIND: draw 3 cards ──────────────────────
-  if(max===6) return {conflict:false, special:'SIX_OF_KIND', combos:['SIX_OF_KIND'], freq};
-
-  // ── NORMAL COMBOS ─────────────────────────────────────
-  const tripleEntry=entries.find(e=>e.c>=3);
-  const dblEntry=tripleEntry?entries.find(e=>e.c>=2&&e.v!==tripleEntry.v):null;
-  const hasTripleDouble=!!(tripleEntry&&dblEntry);
-
-  const primary=[];
-  if(max>=5) primary.push('PENTA');
-  if(max>=4) primary.push('QUAD');
-  if(hasTripleDouble) primary.push('TRIPLE_DOUBLE');
-
-  const hasDouble=max>=2;
-
-  if(primary.length<=1){
-    const combos=[...primary];
-    if(hasDouble && canDoubleCoexist(dice,primary[0])) combos.push('DOUBLE');
-    return {conflict:false, special:null, combos, freq};
+  function go(faceIdx, used, current){
+    const key=[...current].sort().join('|');
+    if(!seen.has(key)){ seen.add(key); bundles.push([...current]); }
+    for(let i=faceIdx;i<faces.length;i++){
+      const f=faces[i]; if(used.has(f)) continue;
+      const c=freq[f];
+      if(c>=5){ used.add(f); go(i+1,used,[...current,'PENTA']); used.delete(f); }
+      if(c>=4){ used.add(f); go(i+1,used,[...current,'QUAD']); used.delete(f); }
+      if(c>=3){
+        // Try every other face as the pair
+        for(let j=0;j<faces.length;j++){
+          if(j===i) continue;
+          const f2=faces[j];
+          if(used.has(f2)||freq[f2]<2) continue;
+          used.add(f); used.add(f2);
+          go(i+1,used,[...current,'TRIPLE_DOUBLE']);
+          used.delete(f); used.delete(f2);
+        }
+      }
+      if(c>=2){ used.add(f); go(i+1,used,[...current,'DOUBLE']); used.delete(f); }
+    }
   }
-  return {conflict:true, special:null, primary, hasDouble, freq};
+
+  go(0,new Set(),[]);
+  return bundles.filter(b=>b.length>0).map(b=>[...b].sort());
 }
 
-function canDoubleCoexist(dice,chosenPrimary){
-  // Under the "one combo per face" rule:
-  // DOUBLE can only come from a DIFFERENT face than the one used by the primary combo.
-  // Same-face leftover dice do NOT qualify for an additional DOUBLE.
+const BUNDLE_SCORE={PENTA:100,QUAD:80,TRIPLE_DOUBLE:60,SIX_OF_KIND:50,DOUBLE:10};
+function bundleScore(b){ return b.reduce((s,c)=>s+(BUNDLE_SCORE[c]||0),0); }
+
+function analyseRoll(dice){
   const freq={};
   dice.forEach(d=>freq[d]=(freq[d]||0)+1);
-  const entries=Object.entries(freq).map(([v,c])=>({v:+v,c})).sort((a,b)=>b.c-a.c);
+  const max=Math.max(...Object.values(freq),0);
 
-  // Track which faces are consumed by the primary
-  const usedFaces=new Set();
+  // ── Auto-resolve specials (6-9 of a kind) ─────────────
+  if(max===9) return {conflict:false,special:'INSTANT_WIN',combos:['INSTANT_WIN'],freq};
+  if(max===8) return {conflict:false,special:'DOUBLE_QUAD',combos:['DOUBLE_QUAD'],freq};
+  if(max===7) return {
+    conflict:true, special:'JOKER',
+    // JOKER: single-element bundles, player picks exactly one
+    bundles:[['DOUBLE'],['TRIPLE_DOUBLE'],['QUAD'],['PENTA'],['SIX_OF_KIND']],
+    combos:['DOUBLE'], freq
+  };
+  if(max===6) return {conflict:false,special:'SIX_OF_KIND',combos:['SIX_OF_KIND'],freq};
 
-  if(chosenPrimary==='PENTA'){
-    const pv=entries.find(e=>e.c>=5); if(pv) usedFaces.add(pv.v);
-  } else if(chosenPrimary==='QUAD'){
-    const qv=entries.find(e=>e.c>=4); if(qv) usedFaces.add(qv.v);
-  } else if(chosenPrimary==='TRIPLE_DOUBLE'){
-    const tv=entries.find(e=>e.c>=3); if(tv) usedFaces.add(tv.v);
-    const dv=tv?entries.find(e=>e.c>=2&&e.v!==tv.v):null; if(dv) usedFaces.add(dv.v);
-  } else if(!chosenPrimary){
-    return entries.some(e=>e.c>=2);
-  }
+  // ── Normal combos: enumerate all valid bundles ─────────
+  const bundles=enumerateComboBundles(dice);
+  bundles.sort((a,b)=>bundleScore(b)-bundleScore(a));
 
-  // DOUBLE only from faces NOT used by the primary
-  return entries.some(e=>!usedFaces.has(e.v)&&e.c>=2);
+  if(bundles.length===0) return {conflict:false,special:null,combos:[],freq};
+  if(bundles.length===1) return {conflict:false,special:null,combos:bundles[0],freq};
+
+  // Multiple options — player chooses
+  return {conflict:true,special:null,bundles,combos:bundles[0],freq};
 }
 
 // ─── GAME LOGIC ──────────────────────────────────────────
@@ -243,7 +244,7 @@ function handleAction(ws,msg){
 
     case 'CHOOSE_COMBO':
       if(g.cur!==seat||g.phase!=='CHOOSE_COMBO')return;
-      resolveChosenCombo(lobby,msg.combo); break;
+      resolveChosenCombo(lobby, msg.bundleIdx||0); break;
 
     case 'BOY_DEFEND':
       if(g.phase!=='BOY_DEFEND'||seat!==1-g.cur)return;
@@ -376,7 +377,10 @@ function rollAndResolve(lobby){
   g.comboOptions=null;
   const analysis=g._pendingAnalysis;
   if(analysis.conflict){
-    g.status=`${g.players[g.cur].name} rolled! See the dice — then continue to choose your combo.`;
+    const bestBundle=analysis.bundles[0];
+    const names={PENTA:'Penta',QUAD:'Quad',TRIPLE_DOUBLE:'Triple+Double',DOUBLE:'Double',SIX_OF_KIND:'Six'};
+    const bestLabel=bestBundle.map(c=>names[c]||c).join(' + ');
+    g.status=`${g.players[g.cur].name} rolled! Multiple options (best: ${bestLabel}) — continue to choose.`;
   } else if(analysis.combos.length){
     const names={PENTA:'Penta',QUAD:'Quad',TRIPLE_DOUBLE:'Triple + Double',DOUBLE:'Double'};
     const labels=analysis.combos.map(c=>names[c]||c).join(' + ');
@@ -405,15 +409,15 @@ function resolvePausedRoll(lobby){
     return;
   }
 
-  // ── JOKER or normal conflict ───────────────────────────
+  // ── Player choice required ──────────────────────────
   if(analysis.conflict){
     g.phase='CHOOSE_COMBO';
-    g.comboOptions=analysis.primary;
+    g.comboOptions=analysis.bundles; // array of bundles (each bundle = array of combo strings)
     g.combos=[];
-    g._jokerRoll=analysis.special==='JOKER'; // flag for resolveChosenCombo
+    g._jokerRoll=analysis.special==='JOKER';
     const msg=g._jokerRoll
-      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any previous combo.`
-      : `${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
+      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any combo:`
+      : `${g.players[g.cur].name} rolled! Multiple options — choose your combo:`;
     g.status=msg;
     broadcastGame(lobby);
     if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1000);
@@ -424,15 +428,12 @@ function resolvePausedRoll(lobby){
   }
 }
 
-function resolveChosenCombo(lobby,chosen){
+function resolveChosenCombo(lobby, bundleIdx){
   const g=lobby.game;
+  const bundle = Array.isArray(g.comboOptions) ? (g.comboOptions[bundleIdx] || g.comboOptions[0]) : [bundleIdx];
   g.comboOptions=null;
-
-  const combos=[chosen];
-  // Joker uses all 7 dice of the same face — no other face can give a DOUBLE
-  if(!g._jokerRoll && canDoubleCoexist(g.dice,chosen)) combos.push('DOUBLE');
   g._jokerRoll=false;
-  applyComboList(lobby,combos);
+  applyComboList(lobby, bundle);
 }
 
 function applyComboList(lobby,combos){
@@ -475,10 +476,13 @@ function applyComboList(lobby,combos){
   }
 
   if(combos.includes('DOUBLE')){
-    g.stats[g.cur].combos.DOUBLE++;
-    const c=dealCard(g);
-    if(c){p.hand.push(c);msgs.push(`Double — drew a card (${c.charAt(0)+c.slice(1).toLowerCase()})`);}
-    else msgs.push('Double — deck empty, nothing to draw');
+    const dblCount = combos.filter(c=>c==='DOUBLE').length;
+    g.stats[g.cur].combos.DOUBLE += dblCount;
+    for(let i=0;i<dblCount;i++){
+      const c=dealCard(g);
+      if(c){p.hand.push(c);msgs.push(`Double — drew ${c.charAt(0)+c.slice(1).toLowerCase()}`);}
+      else msgs.push('Double — deck empty');
+    }
   }
   if(combos.includes('TRIPLE_DOUBLE')){
     g.stats[g.cur].combos.TRIPLE_DOUBLE++;
@@ -572,13 +576,17 @@ function botTurn(lobby){
     return;
   }
   if(g.phase==='CHOOSE_COMBO'){
-    // Bot priority for Joker (6 or 7 of a kind): PENTA > QUAD > TRIPLE_DOUBLE > DOUBLE
-    const order=['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'];
-    const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
+    // Bot picks the highest-scoring bundle (PENTA > QUAD > TD > DOUBLE)
+    let bestIdx=0, bestScore=-1;
+    (g.comboOptions||[]).forEach((bundle,i)=>{
+      const score=bundleScore(bundle);
+      // Tiebreak: prefer bundles with QUAD/TD if cubes to remove, else prefer cards
+      if(score>bestScore){ bestScore=score; bestIdx=i; }
+    });
     const gen=g.turnGen;
     setTimeout(()=>{
       if(g.turnGen!==gen||g.cur!==1||g.phase!=='CHOOSE_COMBO')return;
-      resolveChosenCombo(lobby,choice);
+      resolveChosenCombo(lobby,bestIdx);
     },900);
     return;
   }
@@ -1990,15 +1998,35 @@ function handleOverlays(s){
     const explain=s.rollExplain?'You rolled: '+s.rollExplain+'. ':'';
     const isJoker=s.comboPickReason==='JOKER';
     $('combo-overlay-msg').textContent=isJoker
-      ? explain+'🃏 Seven of a kind — the Joker! Choose any previous combo:'
-      : explain+'These combos conflict — pick one:';
+      ? explain+'🃏 Seven of a kind — the Joker! Choose any combo:'
+      : explain+'Multiple options — choose your combination:';
     const list=$('combo-choice-list'); list.innerHTML='';
-    s.comboOptions.forEach(combo=>{
-      const info=COMBO_INFO[combo];
+
+    const COMBO_NAMES={
+      PENTA:'🎯 Penta', QUAD:'🔓 Quad', TRIPLE_DOUBLE:'🍾 Triple+Double',
+      DOUBLE:'🎲 Double', SIX_OF_KIND:'🃏 Six of a Kind'
+    };
+    const COMBO_EFFECTS={
+      PENTA:'Opponent discards hand',
+      QUAD:'Remove 1 red cube',
+      TRIPLE_DOUBLE:'Stock 1 bottle',
+      DOUBLE:'Draw 1 card',
+      SIX_OF_KIND:'Draw 3 cards'
+    };
+
+    s.comboOptions.forEach((bundle,idx)=>{
+      // Count duplicates for display (e.g. 3× Double)
+      const counts={};
+      bundle.forEach(c=>counts[c]=(counts[c]||0)+1);
+      const parts=Object.entries(counts).map(([c,n])=>(n>1?n+'× ':'')+COMBO_NAMES[c]);
+      const effects=Object.entries(counts).map(([c,n])=>COMBO_EFFECTS[c]+(n>1?' (×'+n+')':''));
+
       const btn=document.createElement('button');
       btn.className='combo-choice-btn';
-      btn.innerHTML='<div class="ccb-name">'+info.label+'</div><div class="ccb-desc">'+info.detail+'<br><strong style="color:var(--cream)">→ '+info.desc+'</strong></div>';
-      btn.onclick=()=>send({type:'CHOOSE_COMBO',combo});
+      btn.innerHTML=
+        '<div class="ccb-name">'+parts.join(' + ')+'</div>'+
+        '<div class="ccb-desc">→ <strong style="color:var(--cream)">'+effects.join(' &amp; ')+'</strong></div>';
+      btn.onclick=()=>send({type:'CHOOSE_COMBO', bundleIdx:idx});
       list.appendChild(btn);
     });
     openOverlay('combo-overlay');
@@ -2183,18 +2211,18 @@ function renderComboBadges(combos, statusText){
 
 
 function bottleSVG(){
-  // Original artwork: potion-svgrepo-com.svg (svgrepo.com) — adapted to 26×52px
+  // Original artwork: potion-svgrepo-com.svg (svgrepo.com) — adapted to 26×52px, recoloured to bottle green
   return '<svg class="bottle-svg" width="26" height="52" viewBox="0 0 512 512" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">'
-    + '<polygon style="fill:#F58E42;" points="348.596,8.17 337.702,73.532 256,106.213 174.298,73.532 163.404,8.17"/>'
-    + '<path style="fill:#7B2FA8;" d="M413.957,236.936v234.213c0,17.974-14.706,32.681-32.681,32.681H130.723c-17.974,0-32.681-14.706-32.681-32.681V236.936c0-35.949,29.413-65.362,65.362-65.362V95.319h185.191v76.255C384.545,171.574,413.957,200.987,413.957,236.936z"/>'
-    + '<path style="fill:#5C1A85;" d="M348.596,73.532c9.02,0,16.34,7.321,16.34,16.34s-7.32,16.34-16.34,16.34H163.404c-9.02,0-16.34-7.321-16.34-16.34c0-4.51,1.83-8.595,4.793-11.547c2.952-2.963,7.037-4.793,11.547-4.793h10.894h163.404H348.596z"/>'
-    + '<polygon style="fill:#F1ECDE;" points="381.277,405.787 381.277,438.468 130.723,438.468 130.723,269.617 163.404,269.617 179.745,280.511 196.085,269.617 381.277,269.617 381.277,373.106 370.383,389.447"/>'
-    + '<circle style="fill:#A59D8C;" cx="312.778" cy="362.213" r="8.17"/>'
-    + '<circle style="fill:#A59D8C;" cx="285.543" cy="384" r="8.17"/>'
-    + '<circle style="fill:#A59D8C;" cx="199.212" cy="324.085" r="8.17"/>'
-    + '<path style="fill:#2a0840;" d="M356.766,163.855v-50.878c9.509-3.373,16.34-12.455,16.34-23.105c0-13.515-10.995-24.511-24.511-24.511h-1.248l9.308-55.848c0.394-2.369-0.272-4.792-1.825-6.624C353.278,1.057,350.998,0,348.596,0H163.404c-2.402,0-4.682,1.057-6.234,2.889c-1.552,1.832-2.22,4.255-1.825,6.624l9.308,55.848h-1.248c-13.516,0-24.511,10.996-24.511,24.511c0,10.651,6.831,19.733,16.34,23.105v50.878c-36.715,4.077-65.362,35.296-65.362,73.081v234.213c0,22.526,18.325,40.851,40.851,40.851h250.553c22.526,0,40.851-18.325,40.851-40.851V236.936C422.128,199.152,393.481,167.933,356.766,163.855z M173.049,16.34h165.902l-8.17,49.021H181.22L173.049,16.34z M405.787,471.149c0,13.515-10.995,24.511-24.511,24.511H130.723c-13.516,0-24.511-10.996-24.511-24.511V236.936c0-31.535,25.656-57.191,57.191-57.191c4.512,0,8.17-3.657,8.17-8.17v-57.191h24.511c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-32.681c-4.506,0-8.17-3.665-8.17-8.17s3.665-8.17,8.17-8.17h174.295c0.037,0,10.897,0,10.897,0c4.506,0,8.17,3.665,8.17,8.17s-3.665,8.17-8.17,8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17s3.658,8.17,8.17,8.17h111.66v57.191c0,4.513,3.658,8.17,8.17,8.17c31.536,0,57.191,25.657,57.191,57.191V471.149z"/>'
-    + '<path style="fill:#2a0840;" d="M196.085,179.745h119.83c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17S191.573,179.745,196.085,179.745z"/>'
-    + '<path style="fill:#2a0840;" d="M381.277,261.447H196.085c-1.612,0-3.19,0.477-4.532,1.373l-11.809,7.872l-11.809-7.873c-1.342-0.894-2.919-1.373-4.532-1.373h-32.681c-4.512,0-8.17,3.657-8.17,8.17v168.851c0,4.513,3.658,8.17,8.17,8.17h250.553c4.512,0,8.17-3.657,8.17-8.17v-32.681c0-1.612-0.477-3.191-1.373-4.532l-7.873-11.809l7.873-11.809c0.894-1.341,1.373-2.919,1.373-4.532V269.616C389.447,265.104,385.789,261.447,381.277,261.447z M373.106,370.632l-9.521,14.281c-1.83,2.745-1.83,6.319,0,9.064l9.521,14.282v22.039H138.894V277.787h22.037l14.283,9.521c2.745,1.83,6.319,1.83,9.064,0l14.283-9.521h174.547V370.632z"/>'
+    + '<polygon style="fill:#4a8c3f;" points="348.596,8.17 337.702,73.532 256,106.213 174.298,73.532 163.404,8.17"/>'
+    + '<path style="fill:#2a7040;" d="M413.957,236.936v234.213c0,17.974-14.706,32.681-32.681,32.681H130.723c-17.974,0-32.681-14.706-32.681-32.681V236.936c0-35.949,29.413-65.362,65.362-65.362V95.319h185.191v76.255C384.545,171.574,413.957,200.987,413.957,236.936z"/>'
+    + '<path style="fill:#1a5a2e;" d="M348.596,73.532c9.02,0,16.34,7.321,16.34,16.34s-7.32,16.34-16.34,16.34H163.404c-9.02,0-16.34-7.321-16.34-16.34c0-4.51,1.83-8.595,4.793-11.547c2.952-2.963,7.037-4.793,11.547-4.793h10.894h163.404H348.596z"/>'
+    + '<polygon style="fill:#d4e8c2;" points="381.277,405.787 381.277,438.468 130.723,438.468 130.723,269.617 163.404,269.617 179.745,280.511 196.085,269.617 381.277,269.617 381.277,373.106 370.383,389.447"/>'
+    + '<circle style="fill:#8aaa78;" cx="312.778" cy="362.213" r="8.17"/>'
+    + '<circle style="fill:#8aaa78;" cx="285.543" cy="384" r="8.17"/>'
+    + '<circle style="fill:#8aaa78;" cx="199.212" cy="324.085" r="8.17"/>'
+    + '<path style="fill:#0d2e16;" d="M356.766,163.855v-50.878c9.509-3.373,16.34-12.455,16.34-23.105c0-13.515-10.995-24.511-24.511-24.511h-1.248l9.308-55.848c0.394-2.369-0.272-4.792-1.825-6.624C353.278,1.057,350.998,0,348.596,0H163.404c-2.402,0-4.682,1.057-6.234,2.889c-1.552,1.832-2.22,4.255-1.825,6.624l9.308,55.848h-1.248c-13.516,0-24.511,10.996-24.511,24.511c0,10.651,6.831,19.733,16.34,23.105v50.878c-36.715,4.077-65.362,35.296-65.362,73.081v234.213c0,22.526,18.325,40.851,40.851,40.851h250.553c22.526,0,40.851-18.325,40.851-40.851V236.936C422.128,199.152,393.481,167.933,356.766,163.855z M173.049,16.34h165.902l-8.17,49.021H181.22L173.049,16.34z M405.787,471.149c0,13.515-10.995,24.511-24.511,24.511H130.723c-13.516,0-24.511-10.996-24.511-24.511V236.936c0-31.535,25.656-57.191,57.191-57.191c4.512,0,8.17-3.657,8.17-8.17v-57.191h24.511c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-32.681c-4.506,0-8.17-3.665-8.17-8.17s3.665-8.17,8.17-8.17h174.295c0.037,0,10.897,0,10.897,0c4.506,0,8.17,3.665,8.17,8.17s-3.665,8.17-8.17,8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17s3.658,8.17,8.17,8.17h111.66v57.191c0,4.513,3.658,8.17,8.17,8.17c31.536,0,57.191,25.657,57.191,57.191V471.149z"/>'
+    + '<path style="fill:#0d2e16;" d="M196.085,179.745h119.83c4.512,0,8.17-3.657,8.17-8.17s-3.658-8.17-8.17-8.17h-119.83c-4.512,0-8.17,3.657-8.17,8.17S191.573,179.745,196.085,179.745z"/>'
+    + '<path style="fill:#0d2e16;" d="M381.277,261.447H196.085c-1.612,0-3.19,0.477-4.532,1.373l-11.809,7.872l-11.809-7.873c-1.342-0.894-2.919-1.373-4.532-1.373h-32.681c-4.512,0-8.17,3.657-8.17,8.17v168.851c0,4.513,3.658,8.17,8.17,8.17h250.553c4.512,0,8.17-3.657,8.17-8.17v-32.681c0-1.612-0.477-3.191-1.373-4.532l-7.873-11.809l7.873-11.809c0.894-1.341,1.373-2.919,1.373-4.532V269.616C389.447,265.104,385.789,261.447,381.277,261.447z M373.106,370.632l-9.521,14.281c-1.83,2.745-1.83,6.319,0,9.064l9.521,14.282v22.039H138.894V277.787h22.037l14.283,9.521c2.745,1.83,6.319,1.83,9.064,0l14.283-9.521h174.547V370.632z"/>'
     + '</svg>';
 }
 
