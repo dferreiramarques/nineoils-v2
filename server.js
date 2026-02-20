@@ -398,7 +398,7 @@ function resolvePausedRoll(lobby){
     g.combos=[];
     g._jokerRoll=analysis.special==='JOKER'; // flag for resolveChosenCombo
     const msg=g._jokerRoll
-      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any combo.`
+      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any previous combo.`
       : `${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     g.status=msg;
     broadcastGame(lobby);
@@ -1248,9 +1248,9 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         <div class="combo-entry">
           <div class="combo-name" style="color:#e8c84a">JOKER</div>
           <div class="combo-dice">7 of the same</div>
-          <div class="combo-effect">→ Choose any combo</div>
+          <div class="combo-effect">→ Choose any previous combo</div>
         </div>
-        <div class="combo-entry">
+        <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem">
           <div class="combo-name" style="color:#e8c84a">EIGHT</div>
           <div class="combo-dice">8 of the same</div>
           <div class="combo-effect">→ Remove 2 cubes</div>
@@ -1409,7 +1409,7 @@ const COMBO_INFO = {
   TRIPLE_DOUBLE:{ label:'🍾 Triple + Double',   desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
   DOUBLE:       { label:'🎲 Double',            desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
   SIX_OF_KIND:  { label:'🃏 Six of a Kind',     desc:'Draw 3 Character cards from the deck', detail:'6 dice showing the same value' },
-  JOKER:        { label:'🃏 Joker',             desc:'Choose any combo — 7 dice match!', detail:'7 dice showing the same value' },
+  JOKER:        { label:'🃏 Joker',             desc:'Choose any previous combo (Double through Six)', detail:'7 dice showing the same value' },
   DOUBLE_QUAD:  { label:'🔓🔓 Eight of a Kind', desc:'Remove 2 red cubes instantly!', detail:'8 dice showing the same value' },
   INSTANT_WIN:  { label:'💀 Nine of a Kind',    desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
 };
@@ -1896,7 +1896,7 @@ function handleOverlays(s){
     const explain=s.rollExplain?'You rolled: '+s.rollExplain+'. ':'';
     const isJoker=s.comboPickReason==='JOKER';
     $('combo-overlay-msg').textContent=isJoker
-      ? explain+'🃏 Seven of a kind — the Joker! Choose any combo:'
+      ? explain+'🃏 Seven of a kind — the Joker! Choose any previous combo:'
       : explain+'These combos conflict — pick one:';
     const list=$('combo-choice-list'); list.innerHTML='';
     s.comboOptions.forEach(combo=>{
