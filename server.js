@@ -184,6 +184,7 @@ function buildView(g,seat){
     winnerIdx:g.winnerIdx,
     isSolo:g.isSolo,
     stats:g.stats,
+    boysAttacking:g._boysAttacking||0,
   };
 }
 
@@ -231,29 +232,31 @@ function handleAction(ws,msg){
 
     case 'BOY_DEFEND':
       if(g.phase!=='BOY_DEFEND'||seat!==1-g.cur)return;
-      if(msg.defend){
-        const bi=g.players[seat].hand.indexOf('BULLY');
-        if(bi>=0){g.players[seat].hand.splice(bi,1);trash(g,'BULLY');g.stats[seat].cards++;}
-        // Defender played Bully — check if attacker has a Boy to counter
-        if(g.players[g.cur].hand.includes('BOY')){
-          g.phase='BOY_COUNTER';
-          g.status=`${g.players[seat].name} plays the Bully! ${g.players[g.cur].name}, counter with another Boy?`;
-          broadcastGame(lobby);
-          if(g.isSolo&&g.cur===1) scheduleBotTurn(lobby,1400);
-          return;
+      {
+        const bulliesPlayed=Math.min(
+          Math.max(0, msg.bulliesPlayed||0),
+          g._boysAttacking||0,
+          g.players[seat].hand.filter(c=>c==='BULLY').length
+        );
+        // Spend the bullies
+        let spent=0;
+        while(spent<bulliesPlayed){
+          const bi=g.players[seat].hand.indexOf('BULLY');
+          if(bi<0) break;
+          g.players[seat].hand.splice(bi,1); trash(g,'BULLY'); g.stats[seat].cards++; spent++;
         }
-        g.status=`${g.players[seat].name} plays the Bully! The theft is stopped.`;
-      } else doSteal(g);
-      rollAndResolve(lobby); break;
-
-    case 'BOY_COUNTER':
-      if(g.phase!=='BOY_COUNTER'||seat!==g.cur)return;
-      if(msg.counter){
-        const bi=g.players[seat].hand.indexOf('BOY');
-        if(bi>=0){g.players[seat].hand.splice(bi,1);trash(g,'BOY');g.stats[seat].cards++;}
-        doSteal(g);
-      } else {
-        g.status=`${g.players[g.cur].name} holds back — the theft is abandoned.`;
+        const attacks=g._boysAttacking||1;
+        const steals=attacks-bulliesPlayed;
+        const stallBottles=g.players[1-g.cur].stall.filter(s=>s===2).length;
+        const actualSteals=Math.min(steals, stallBottles);
+        for(let i=0;i<actualSteals;i++) doSteal(g);
+        const parts=[];
+        if(bulliesPlayed>0) parts.push(`${g.players[seat].name} blocks ${bulliesPlayed} attack${bulliesPlayed>1?'s':''} with ${bulliesPlayed===1?'a Bully':'Bullies'}`);
+        if(actualSteals>0) parts.push(`${g.players[g.cur].name} steals ${actualSteals} bottle${actualSteals>1?'s':''}`);
+        if(actualSteals===0&&bulliesPlayed>0) parts.push('all attacks blocked!');
+        if(actualSteals===0&&bulliesPlayed===0) parts.push(`${g.players[g.cur].name}'s Boys find an empty stall`);
+        g.status=parts.join(' — ')+'!';
+        g._boysAttacking=0;
       }
       rollAndResolve(lobby); break;
 
@@ -315,22 +318,23 @@ function processCardPlays(lobby){
       g.status=`The Boy reaches out — ${opp.name}'s stall is bare!`;
       rollAndResolve(lobby); return;
     }
-    if(boys>=2){
-      // 2 Boys played upfront — steal up to 2 bottles, unblockable
-      doSteal(g);
-      if(opp.stall.filter(s=>s===2).length>0) doSteal(g);
-      g.status=`${p.name} plays 2 Boys — steals ${Math.min(boys,stallBottles)} bottle${Math.min(boys,stallBottles)>1?'s':''} from ${opp.name}'s stall!`;
+    const bulliesAvailable=opp.hand.filter(c=>c==='BULLY').length;
+    g._boysAttacking=boys;
+    if(bulliesAvailable===0){
+      // No defence possible — steals happen immediately
+      const actualSteals=Math.min(boys, stallBottles);
+      for(let i=0;i<actualSteals;i++) doSteal(g);
+      g.status=`${p.name} plays ${boys===1?'The Boy':'2 Boys'} — steals ${actualSteals} bottle${actualSteals>1?'s':''}!`;
+      g._boysAttacking=0;
       rollAndResolve(lobby); return;
     }
-    if(opp.hand.includes('BULLY')){
-      g.phase='BOY_DEFEND';
-      g.status=`${p.name} plays The Boy! ${opp.name}, defend with a Bully?`;
-      broadcastGame(lobby);
-      // If bot is defending
-      if(g.isSolo&&1-g.cur===1) setTimeout(()=>botDefend(lobby),1400);
-      return;
-    }
-    doSteal(g); rollAndResolve(lobby); return;
+    // Defender has at least one Bully — show defend overlay
+    g.phase='BOY_DEFEND';
+    const maxBlock=Math.min(bulliesAvailable, boys);
+    g.status=`${p.name} plays ${boys===1?'The Boy':boys+' Boys'}! ${opp.name}, you have ${bulliesAvailable} Bull${bulliesAvailable>1?'ies':'y'} — block up to ${maxBlock} attack${maxBlock>1?'s':''}.`;
+    broadcastGame(lobby);
+    if(g.isSolo&&1-g.cur===1) setTimeout(()=>botDefend(lobby),1400);
+    return;
   }
   rollAndResolve(lobby);
 }
@@ -526,25 +530,6 @@ function botTurn(lobby){
     },1400);
     return;
   }
-  if(g.phase==='BOY_COUNTER'){
-    // Bot always counters with a Boy if it has one — aggressive strategy
-    const gen=g.turnGen;
-    setTimeout(()=>{
-      if(g.turnGen!==gen||g.cur!==1||g.phase!=='BOY_COUNTER')return;
-      const hasBoy=g.players[1].hand.includes('BOY');
-      const msg=hasBoy?{type:'BOY_COUNTER',counter:true}:{type:'BOY_COUNTER',counter:false};
-      // Simulate the action directly
-      if(hasBoy){
-        const bi=g.players[1].hand.indexOf('BOY');
-        g.players[1].hand.splice(bi,1);trash(g,'BOY');g.stats[1].cards++;
-        doSteal(g);
-      } else {
-        g.status=`${g.players[1].name} has no Boy to counter — theft abandoned.`;
-      }
-      rollAndResolve(lobby);
-    },900);
-    return;
-  }
   if(g.phase==='CHOOSE_COMBO'){
     // Bot priority: PENTA > QUAD > TRIPLE_DOUBLE > DOUBLE
     // This works for both normal conflicts and Joker (all 4 options presented)
@@ -580,21 +565,27 @@ function botTurn(lobby){
 function botDefend(lobby){
   const g=lobby.game; if(!g||g.phase!=='BOY_DEFEND'||g.cur!==0||!g.isSolo)return;
   const bot=g.players[1];
-  const hasBully=bot.hand.includes('BULLY');
-  if(hasBully){
+  const attacks=g._boysAttacking||1;
+  const bulliesAvailable=bot.hand.filter(c=>c==='BULLY').length;
+  // Bot always blocks as many as possible
+  const bulliesPlayed=Math.min(bulliesAvailable, attacks);
+  // Simulate BOY_DEFEND message directly
+  let spent=0;
+  while(spent<bulliesPlayed){
     const bi=bot.hand.indexOf('BULLY');
-    bot.hand.splice(bi,1);trash(g,'BULLY');
-    g.stats[1].cards++;
-    // Check if attacker (human, seat 0) has a Boy to counter
-    if(g.players[0].hand.includes('BOY')){
-      g.phase='BOY_COUNTER';
-      g.status=`${bot.name} plays the Bully! ${g.players[0].name}, counter with another Boy?`;
-      broadcastGame(lobby); return;
-    }
-    g.status=`${bot.name} plays the Bully! The theft is stopped.`;
-  } else {
-    doSteal(g);
+    if(bi<0) break;
+    bot.hand.splice(bi,1); trash(g,'BULLY'); g.stats[1].cards++; spent++;
   }
+  const steals=attacks-bulliesPlayed;
+  const stallBottles=g.players[0].stall.filter(s=>s===2).length;
+  const actualSteals=Math.min(steals, stallBottles);
+  for(let i=0;i<actualSteals;i++) doSteal(g);
+  const parts=[];
+  if(bulliesPlayed>0) parts.push(`${bot.name} blocks ${bulliesPlayed} attack${bulliesPlayed>1?'s':''} with ${bulliesPlayed===1?'a Bully':'Bullies'}`);
+  if(actualSteals>0) parts.push(`${g.players[0].name} steals ${actualSteals} bottle${actualSteals>1?'s':''}`);
+  if(actualSteals===0&&bulliesPlayed>0) parts.push('all attacks blocked!');
+  g.status=parts.join(' — ')+(parts.length?'!':'');
+  g._boysAttacking=0;
   rollAndResolve(lobby);
 }
 
@@ -1251,12 +1242,11 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         </div>
         <div class="card-rule">
           <div class="card-rule-name">🤏 The Boy</div>
-          <div class="card-rule-text">Steal 1 bottle from opponent's stall.<br>
+          <div class="card-rule-text">Each Boy steals 1 bottle. Each Bully blocks 1 Boy.<br>
           <span style="color:var(--cream-dark);font-size:.72rem">
-            • 1 Boy → steal 1 bottle<br>
-            • 1 Boy + opponent plays Bully → theft blocked<br>
-            • 1 Boy + opponent Bully + your 2nd Boy → steal succeeds<br>
-            • 2 Boys upfront → steal 2 bottles, unblockable
+            • 2 Boys vs 1 Bully → 1 stolen, 1 blocked<br>
+            • 2 Boys vs 0 Bullies → 2 stolen<br>
+            • 1 Boy vs 1 Bully → fully blocked
           </span></div>
         </div>
         <div class="card-rule">
@@ -1292,27 +1282,10 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 <div class="overlay" id="boy-overlay">
   <div class="modal">
     <div class="modal-icon">🤏</div>
-    <h2>The Boy Strikes!</h2>
-    <p id="boy-msg">Opponent plays The Boy!</p>
+    <h2>Under Attack!</h2>
+    <p id="boy-msg">Opponent plays Boys!</p>
     <div class="gold-line"></div>
-    <div class="hand-cards" id="boy-hand" style="justify-content:center;margin-bottom:.7rem"></div>
-    <div class="modal-btns">
-      <button class="btn" id="defend-btn" onclick="send({type:'BOY_DEFEND',defend:true})">Play Bully to Defend</button>
-      <button class="btn danger" onclick="send({type:'BOY_DEFEND',defend:false})">Take the Hit</button>
-    </div>
-  </div>
-</div>
-
-<div class="overlay" id="counter-overlay">
-  <div class="modal">
-    <div class="modal-icon">⚔️</div>
-    <h2>Counter Attack!</h2>
-    <p id="counter-msg">Your opponent blocked with a Bully. Play another Boy to push through?</p>
-    <div class="gold-line"></div>
-    <div class="modal-btns">
-      <button class="btn" id="counter-btn" onclick="send({type:'BOY_COUNTER',counter:true})">Play Boy — Steal!</button>
-      <button class="btn danger" onclick="send({type:'BOY_COUNTER',counter:false})">Back Down</button>
-    </div>
+    <div id="boy-bully-btns" style="display:flex;flex-direction:column;gap:.5rem;margin:.6rem 0"></div>
   </div>
 </div>
 
@@ -1894,21 +1867,28 @@ function handleOverlays(s){
     openOverlay('combo-overlay');
   } else closeOverlay('combo-overlay');
 
-  // BOY DEFEND
+  // BOY DEFEND — defender chooses how many Bullies to play (0 to min(bullies, boysAttacking))
   if(s.phase==='BOY_DEFEND'&&!s.isMyTurn){
-    $('boy-msg').textContent=s.oppName+' plays The Boy! Defend with a Bully?';
-    $('defend-btn').disabled=!s.myHand.includes('BULLY');
-    const hd=$('boy-hand');hd.innerHTML='';
-    s.myHand.forEach(c=>{const wrap=document.createElement('div');wrap.className='card-wrap';const el=makeCard(c,true);el.onclick=()=>openCardInfo(c);wrap.appendChild(el);wrap.appendChild(makeTooltip(c));hd.appendChild(wrap);});
+    const attacks = s.boysAttacking || 1;
+    const myBullies = s.myHand.filter(c=>c==='BULLY').length;
+    const maxBlock = Math.min(myBullies, attacks);
+    $('boy-msg').textContent = s.oppName + ' plays ' + attacks + ' Boy' + (attacks>1?'s':'') + '! You have ' + myBullies + ' Bull' + (myBullies===1?'y':'ies') + '.';
+    const btns = $('boy-bully-btns'); btns.innerHTML = '';
+    // One button per possible number of bullies to play (max down to 0)
+    for(let b = maxBlock; b >= 0; b--){
+      const btn = document.createElement('button');
+      btn.className = b > 0 ? 'btn' : 'btn danger';
+      if(b === 0) btn.textContent = 'Take the Hit' + (attacks > 1 ? 's (' + attacks + ' stolen)' : ' (1 stolen)');
+      else {
+        const remaining = attacks - b;
+        btn.textContent = 'Block ' + b + ' with Bull' + (b===1?'y':'ies') + (remaining > 0 ? ' (' + remaining + ' still stolen)' : ' — fully blocked!');
+      }
+      const captured = b;
+      btn.onclick = () => send({type:'BOY_DEFEND', bulliesPlayed: captured});
+      btns.appendChild(btn);
+    }
     openOverlay('boy-overlay');
   } else closeOverlay('boy-overlay');
-
-  // BOY COUNTER (attacker responds to Bully with a second Boy)
-  if(s.phase==='BOY_COUNTER'&&s.isMyTurn){
-    $('counter-msg').textContent=s.oppName+' blocked with a Bully! Play another Boy to push through?';
-    $('counter-btn').disabled=!s.myHand.includes('BOY');
-    openOverlay('counter-overlay');
-  } else closeOverlay('counter-overlay');
 
   // BLIND PICK
   if(s.phase==='BLIND_PICK'&&s.isMyTurn){
