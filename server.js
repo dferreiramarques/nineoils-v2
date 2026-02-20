@@ -1194,6 +1194,19 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
           <div class="combo-dice">5 of the same value</div>
           <div class="combo-effect">→ Opponent discards entire hand</div>
         </div>
+        <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem">
+          <div class="combo-name" style="color:#e8c84a">✦ JOKER</div>
+          <div class="combo-dice">7 of the same value</div>
+          <div class="combo-effect">→ Choose any combo freely</div>
+        </div>
+        <div class="combo-entry">
+          <div class="combo-name" style="color:#e8c84a">✦ NINE OF A KIND</div>
+          <div class="combo-dice">All 9 dice the same</div>
+          <div class="combo-effect">→ Instant win — game over!</div>
+        </div>
+        <div style="font-size:.71rem;color:var(--cream-dark);margin-top:.5rem;padding-top:.4rem;border-top:1px solid rgba(160,112,40,.2);line-height:1.45">
+          <strong style="color:var(--cream)">Rule:</strong> Each face value produces only <strong style="color:var(--cream)">one combo</strong> per roll. Choose wisely.
+        </div>
       </div>
 
       <div class="rules-section">
@@ -1229,7 +1242,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
       <div class="rules-section">
         <h3>⚔️ Conflicts</h3>
         <div style="font-size:.74rem;color:var(--cream-dark);line-height:1.45">
-          When the same dice qualify for multiple combos, you choose which one to use.
+          When dice of the same face qualify for multiple combos, you choose which one to activate. The remaining dice of that face are discarded — no cascading.
         </div>
       </div>
     </div><!-- /rules-sidebar -->
