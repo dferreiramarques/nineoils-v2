@@ -1739,25 +1739,25 @@ function renderWinStats(s){
     {label:'Cards',      me:me.cards,     opp:opp.cards,     text:false},
     {label:'Best Combo', me:bestCombo(me),opp:bestCombo(opp),text:true},
   ];
-  const numStyle='text-align:right;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--gold);font-weight:700';
-  const numStyleOpp='text-align:left;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--cream-dark);font-weight:700';
-  const txtStyle='text-align:right;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--gold);font-weight:700';
-  const txtStyleOpp='text-align:left;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--cream-dark);font-weight:700';
-  const midStyle='text-align:center;padding:.4rem .5rem;font-size:1rem;color:var(--cream-dark);font-style:italic;white-space:nowrap';
+  const numStyle='text-align:center;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--gold);font-weight:700;width:38%';
+  const numStyleOpp='text-align:center;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1.7rem;color:var(--cream-dark);font-weight:700;width:38%';
+  const txtStyle='text-align:center;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--gold);font-weight:700;width:38%';
+  const txtStyleOpp='text-align:center;padding:.4rem .7rem;font-family:Cinzel,serif;font-size:1rem;color:var(--cream-dark);font-weight:700;width:38%';
+  const midStyle='text-align:center;padding:.4rem .5rem;font-size:.8rem;color:var(--cream-dark);font-style:italic;white-space:nowrap;width:24%';
   let rowsHtml='';
   rows.forEach(function(r){
     const ms=r.text?txtStyle:numStyle;
     const os=r.text?txtStyleOpp:numStyleOpp;
     rowsHtml+='<tr><td style="'+ms+'">'+r.me+'</td><td style="'+midStyle+'">'+r.label+'</td><td style="'+os+'">'+r.opp+'</td></tr>';
   });
-  const hdrStyle='font-family:Cinzel,serif;font-size:1rem;opacity:.7;padding:.2rem .7rem';
+  const hdrStyle='font-family:Cinzel,serif;font-size:1rem;opacity:.7;padding:.2rem .7rem;text-align:center';
   el.innerHTML=
     '<div style="font-family:Cinzel,serif;font-size:1rem;color:var(--gold-light);letter-spacing:.1em;text-align:center;margin-bottom:.6rem">— Game Summary —</div>'+
-    '<table style="width:100%;border-collapse:collapse;margin:0 auto">'+
+    '<table style="width:100%;border-collapse:collapse;margin:0 auto;table-layout:fixed">'+
       '<thead><tr>'+
-        '<th style="text-align:right;color:var(--gold-light);'+hdrStyle+'">'+s.myName+'</th>'+
-        '<th></th>'+
-        '<th style="text-align:left;color:var(--cream-dark);'+hdrStyle+'">'+s.oppName+'</th>'+
+        '<th style="color:var(--gold-light);'+hdrStyle+'">'+s.myName+'</th>'+
+        '<th style="width:24%"></th>'+
+        '<th style="color:var(--cream-dark);'+hdrStyle+'">'+s.oppName+'</th>'+
       '</tr></thead>'+
       '<tbody>'+rowsHtml+'</tbody>'+
     '</table>';
