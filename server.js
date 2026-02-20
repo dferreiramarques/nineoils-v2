@@ -68,12 +68,15 @@ function analyseRoll(dice) {
   // ── DOUBLE_QUAD: 8 of a kind — removes 2 cubes ───────
   if(max===8) return {conflict:false, special:'DOUBLE_QUAD', combos:['DOUBLE_QUAD'], freq};
 
-  // ── JOKER: 6 or 7 of a kind — choose any combo ───────
-  if(max>=6) return {
+  // ── JOKER: exactly 7 of a kind — choose any combo ────
+  if(max===7) return {
     conflict:true, special:'JOKER',
     primary:['DOUBLE','TRIPLE_DOUBLE','QUAD','PENTA'],
     hasDouble:false, freq
   };
+
+  // ── SIX OF A KIND: draw 3 cards ──────────────────────
+  if(max===6) return {conflict:false, special:'SIX_OF_KIND', combos:['SIX_OF_KIND'], freq};
 
   // ── NORMAL COMBOS ─────────────────────────────────────
   const tripleEntry=entries.find(e=>e.c>=3);
@@ -395,7 +398,7 @@ function resolvePausedRoll(lobby){
     g.combos=[];
     g._jokerRoll=analysis.special==='JOKER'; // flag for resolveChosenCombo
     const msg=g._jokerRoll
-      ? `${g.players[g.cur].name} rolled ${analysis.combos?'':'6 or 7'} of a kind — the Joker! Choose any combo.`
+      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any combo.`
       : `${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     g.status=msg;
     broadcastGame(lobby);
@@ -440,8 +443,21 @@ function applyComboList(lobby,combos){
       if(slot>=0){p.stall[slot]=1;removed++;}
     }
     msgs.push(removed>0
-      ?`Eight of a kind — ${removed} cube${removed>1?'s':''} removed! ${removed>1?'Both slots unlocked!':'Slot unlocked!'}`
+      ?`Eight of a kind — ${removed} cube${removed>1?'s':''} removed!`
       :`Eight of a kind — no cubes left to remove`);
+  }
+
+  // ── SIX OF A KIND — draw 3 cards ──────────────────────
+  if(combos.includes('SIX_OF_KIND')){
+    let drawn=0;
+    for(let i=0;i<3;i++){
+      const c=dealCard(g);
+      if(c){p.hand.push(c);drawn++;}
+    }
+    g.stats[g.cur].cards+=drawn;
+    msgs.push(drawn>0
+      ?`Six of a kind — drew ${drawn} card${drawn>1?'s':''}!`
+      :`Six of a kind — deck empty, nothing to draw`);
   }
 
   if(combos.includes('DOUBLE')){
@@ -967,7 +983,7 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
 .combo-effect{font-size:.78rem;color:var(--cream);font-style:italic}
 
 /* ── OVERLAY ── */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px);padding:1rem}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:200;backdrop-filter:blur(3px);padding:1rem;overflow-y:auto}
 .overlay.open{display:flex}
 .modal{background:linear-gradient(160deg,#2a1808 0%,#1c1005 50%,#120a02 100%);border:2px solid #c49030;border-radius:13px;padding:1.7rem 1.9rem;max-width:420px;width:92%;text-align:center;box-shadow:0 0 60px rgba(0,0,0,.85),inset 0 1px 0 rgba(196,144,48,.12);writing-mode:horizontal-tb!important;direction:ltr!important}
 .modal *{writing-mode:horizontal-tb!important;direction:ltr!important}
@@ -1085,10 +1101,15 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
   /* Blind pick cards */
   .blind-card{width:52px;height:76px}
 
-  /* Modal */
-  .modal{padding:1.2rem 1.3rem;width:96%}
-  .modal h2{font-size:1.4rem}
-  .modal p{font-size:1.1rem}
+  /* Modal — fit screen on mobile */
+  .overlay{align-items:flex-start;padding-top:env(safe-area-inset-top,12px)}
+  .modal{padding:1rem 1.1rem;width:96%;max-height:92vh;overflow-y:auto}
+  .modal h2{font-size:1.25rem;margin-bottom:.4rem}
+  .modal p{font-size:.95rem;margin-bottom:.6rem}
+  .modal-icon{font-size:1.8rem;margin-bottom:.2rem}
+  .ccb-name{font-size:.88rem}
+  .ccb-desc{font-size:.82rem}
+  .combo-choice-list{gap:.35rem;margin:.4rem 0}
 
   /* Win stats grid */
   .stats-grid{grid-template-columns:1fr 1fr}
@@ -1202,40 +1223,45 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         <div class="combo-entry">
           <div class="combo-name">DOUBLE</div>
           <div class="combo-dice">Any 2 matching dice</div>
-          <div class="combo-effect">→ Draw 1 Character card</div>
+          <div class="combo-effect">→ Draw 1 card</div>
         </div>
         <div class="combo-entry">
           <div class="combo-name">TRIPLE + DOUBLE</div>
           <div class="combo-dice">3 of one + 2 of another</div>
-          <div class="combo-effect">→ Stock 1 bottle in your stall</div>
+          <div class="combo-effect">→ Stock 1 bottle</div>
         </div>
         <div class="combo-entry">
           <div class="combo-name">QUAD</div>
-          <div class="combo-dice">4 of the same value</div>
-          <div class="combo-effect">→ Remove 1 red blocking cube</div>
+          <div class="combo-dice">4 of the same</div>
+          <div class="combo-effect">→ Remove 1 cube</div>
         </div>
         <div class="combo-entry">
           <div class="combo-name">PENTA</div>
-          <div class="combo-dice">5 of the same value</div>
-          <div class="combo-effect">→ Opponent discards entire hand</div>
-        </div>
-        <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem">
-          <div class="combo-name" style="color:#e8c84a">✦ JOKER</div>
-          <div class="combo-dice">6 or 7 of the same value</div>
-          <div class="combo-effect">→ Choose any combo freely</div>
+          <div class="combo-dice">5 of the same</div>
+          <div class="combo-effect">→ Opponent discards hand</div>
         </div>
         <div class="combo-entry">
-          <div class="combo-name" style="color:#e8c84a">✦ EIGHT OF A KIND</div>
-          <div class="combo-dice">8 of the same value</div>
-          <div class="combo-effect">→ Remove 2 red cubes instantly</div>
+          <div class="combo-name">SIX</div>
+          <div class="combo-dice">6 of the same</div>
+          <div class="combo-effect">→ Draw 3 cards</div>
         </div>
         <div class="combo-entry">
-          <div class="combo-name" style="color:#e8c84a">✦ NINE OF A KIND</div>
-          <div class="combo-dice">All 9 dice the same</div>
-          <div class="combo-effect">→ Instant win — game over!</div>
+          <div class="combo-name" style="color:#e8c84a">JOKER</div>
+          <div class="combo-dice">7 of the same</div>
+          <div class="combo-effect">→ Choose any combo</div>
+        </div>
+        <div class="combo-entry">
+          <div class="combo-name" style="color:#e8c84a">EIGHT</div>
+          <div class="combo-dice">8 of the same</div>
+          <div class="combo-effect">→ Remove 2 cubes</div>
+        </div>
+        <div class="combo-entry">
+          <div class="combo-name" style="color:#e8c84a">NINE</div>
+          <div class="combo-dice">All 9 the same</div>
+          <div class="combo-effect">→ Instant win!</div>
         </div>
         <div style="font-size:.71rem;color:var(--cream-dark);margin-top:.5rem;padding-top:.4rem;border-top:1px solid rgba(160,112,40,.2);line-height:1.45">
-          <strong style="color:var(--cream)">Rule:</strong> Each face value produces only <strong style="color:var(--cream)">one combo</strong> per roll. Choose wisely.
+          <strong style="color:var(--cream)">Rule:</strong> One combo per face value per roll.
         </div>
       </div>
 
@@ -1378,13 +1404,14 @@ const CARD_FULL = {
 };
 
 const COMBO_INFO = {
-  PENTA:        { label:'🎯 Penta',           desc:'Opponent discards their entire hand', detail:'5 dice showing the same value' },
-  QUAD:         { label:'🔓 Quad',            desc:'Remove 1 red blocking cube from your stall', detail:'4 dice showing the same value' },
-  TRIPLE_DOUBLE:{ label:'🍾 Triple + Double', desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
-  DOUBLE:       { label:'🎲 Double',          desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
-  JOKER:        { label:'🃏 Joker',           desc:'Choose any combo — 6 or 7 dice match!', detail:'6 or 7 dice showing the same value' },
-  DOUBLE_QUAD:  { label:'🔓🔓 Eight of a Kind', desc:'Remove 2 red cubes — both slots unlocked!', detail:'8 dice showing the same value' },
-  INSTANT_WIN:  { label:'💀 Nine of a Kind',  desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
+  PENTA:        { label:'🎯 Penta',             desc:'Opponent discards their entire hand', detail:'5 dice showing the same value' },
+  QUAD:         { label:'🔓 Quad',              desc:'Remove 1 red blocking cube from your stall', detail:'4 dice showing the same value' },
+  TRIPLE_DOUBLE:{ label:'🍾 Triple + Double',   desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
+  DOUBLE:       { label:'🎲 Double',            desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
+  SIX_OF_KIND:  { label:'🃏 Six of a Kind',     desc:'Draw 3 Character cards from the deck', detail:'6 dice showing the same value' },
+  JOKER:        { label:'🃏 Joker',             desc:'Choose any combo — 7 dice match!', detail:'7 dice showing the same value' },
+  DOUBLE_QUAD:  { label:'🔓🔓 Eight of a Kind', desc:'Remove 2 red cubes instantly!', detail:'8 dice showing the same value' },
+  INSTANT_WIN:  { label:'💀 Nine of a Kind',    desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
 };
 
 const DOTS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
@@ -1869,7 +1896,7 @@ function handleOverlays(s){
     const explain=s.rollExplain?'You rolled: '+s.rollExplain+'. ':'';
     const isJoker=s.comboPickReason==='JOKER';
     $('combo-overlay-msg').textContent=isJoker
-      ? explain+'🃏 Six or seven of a kind — the Joker! Choose any combo:'
+      ? explain+'🃏 Seven of a kind — the Joker! Choose any combo:'
       : explain+'These combos conflict — pick one:';
     const list=$('combo-choice-list'); list.innerHTML='';
     s.comboOptions.forEach(combo=>{
@@ -1894,10 +1921,16 @@ function handleOverlays(s){
     for(let b = maxBlock; b >= 0; b--){
       const btn = document.createElement('button');
       btn.className = b > 0 ? 'btn' : 'btn danger';
-      if(b === 0) btn.textContent = 'Take the Hit' + (attacks > 1 ? 's (' + attacks + ' stolen)' : ' (1 stolen)');
-      else {
+      if(b === 0) {
+        const stolen = attacks;
+        const short = 'Take hit (' + stolen + ' stolen)';
+        const long  = 'Take the Hit (' + stolen + ' bottle' + (stolen>1?'s':'') + ' stolen)';
+        btn.textContent = window.innerWidth < 480 ? short : long;
+      } else {
         const remaining = attacks - b;
-        btn.textContent = 'Block ' + b + ' with Bull' + (b===1?'y':'ies') + (remaining > 0 ? ' (' + remaining + ' still stolen)' : ' — fully blocked!');
+        const shortT = 'Block ' + b + (remaining > 0 ? ' (' + remaining + ' stolen)' : ' — blocked!');
+        const longT  = 'Block ' + b + ' with Bull' + (b===1?'y':'ies') + (remaining > 0 ? ' (' + remaining + ' still stolen)' : ' — fully blocked!');
+        btn.textContent = window.innerWidth < 480 ? shortT : longT;
       }
       const captured = b;
       btn.onclick = () => send({type:'BOY_DEFEND', bulliesPlayed: captured});
@@ -2008,7 +2041,12 @@ function renderComboBadges(combos, statusText){
     DOUBLE_QUAD:{
       cls:'c-quad', name:'EIGHT OF A KIND',
       icon:'🔓🔓',
-      effect:'Two cubes removed — both slots unlocked!'
+      effect:'Two cubes removed instantly!'
+    },
+    SIX_OF_KIND:{
+      cls:'c-double', name:'SIX OF A KIND',
+      icon:'🃏',
+      effect:'Drew 3 Character cards!'
     },
     PENTA:{
       cls:'c-penta', name:'PENTA',
@@ -2033,7 +2071,7 @@ function renderComboBadges(combos, statusText){
   };
 
   // Show in impact order
-  ['INSTANT_WIN','DOUBLE_QUAD','PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
+  ['INSTANT_WIN','DOUBLE_QUAD','SIX_OF_KIND','JOKER','PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
     if(!combos.includes(key)) return;
     const info=COMBO_CARDS[key];
     const card=document.createElement('div');
