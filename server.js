@@ -1710,7 +1710,7 @@ function renderButtons(s){
   if(s.phase==='CARD_PLAY'){
     const b=document.createElement('button');
     b.className='btn';b.textContent=s.sel.length?'✔ Confirm Cards & Roll':'🎲 Roll Dice';
-    b.onclick=()=>SFX.click();send({type:'ROLL'});el.appendChild(b);
+    b.onclick=()=>{ SFX.click(); send({type:'ROLL'}); };el.appendChild(b);
     if(s.sel.length){
       const c=document.createElement('button');c.className='btn danger sm';c.textContent='✕ Clear';
       c.onclick=()=>[...s.sel].forEach(i=>send({type:'SELECT_CARD',idx:i}));el.appendChild(c);
