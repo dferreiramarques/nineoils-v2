@@ -240,6 +240,8 @@ function handleAction(ws,msg){
       if(lobby.game && lobby.players[seat])
         sendTo(lobby.players[seat],{type:'GAME_STATE',state:buildView(g,seat)});
       break;
+
+    case 'CHOOSE_COMBO':
       if(g.cur!==seat||g.phase!=='CHOOSE_COMBO')return;
       resolveChosenCombo(lobby,msg.combo); break;
 
