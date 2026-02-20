@@ -61,14 +61,15 @@ function analyseRoll(dice) {
   dice.forEach(d=>freq[d]=(freq[d]||0)+1);
   const entries=Object.entries(freq).map(([v,c])=>({v:+v,c})).sort((a,b)=>b.c-a.c);
   const max=entries[0]?.c||0;
-  const topFace=entries[0]?.v;
 
   // ── INSTANT WIN: 9 of a kind ──────────────────────────
   if(max===9) return {conflict:false, special:'INSTANT_WIN', combos:['INSTANT_WIN'], freq};
 
-  // ── JOKER: 7 or 8 of a kind ──────────────────────────
-  // (6 and 8 have no extra rule, but 7 is the Joker)
-  if(max===7) return {
+  // ── DOUBLE_QUAD: 8 of a kind — removes 2 cubes ───────
+  if(max===8) return {conflict:false, special:'DOUBLE_QUAD', combos:['DOUBLE_QUAD'], freq};
+
+  // ── JOKER: 6 or 7 of a kind — choose any combo ───────
+  if(max>=6) return {
     conflict:true, special:'JOKER',
     primary:['DOUBLE','TRIPLE_DOUBLE','QUAD','PENTA'],
     hasDouble:false, freq
@@ -79,13 +80,11 @@ function analyseRoll(dice) {
   const dblEntry=tripleEntry?entries.find(e=>e.c>=2&&e.v!==tripleEntry.v):null;
   const hasTripleDouble=!!(tripleEntry&&dblEntry);
 
-  // Build set of primary options from the highest-count face
   const primary=[];
   if(max>=5) primary.push('PENTA');
   if(max>=4) primary.push('QUAD');
   if(hasTripleDouble) primary.push('TRIPLE_DOUBLE');
 
-  // DOUBLE is available from a DIFFERENT face only (one combo per face rule)
   const hasDouble=max>=2;
 
   if(primary.length<=1){
@@ -93,7 +92,6 @@ function analyseRoll(dice) {
     if(hasDouble && canDoubleCoexist(dice,primary[0])) combos.push('DOUBLE');
     return {conflict:false, special:null, combos, freq};
   }
-  // Conflict: player must choose
   return {conflict:true, special:null, primary, hasDouble, freq};
 }
 
@@ -397,7 +395,7 @@ function resolvePausedRoll(lobby){
     g.combos=[];
     g._jokerRoll=analysis.special==='JOKER'; // flag for resolveChosenCombo
     const msg=g._jokerRoll
-      ? `${g.players[g.cur].name} rolled 7 of a kind — the Joker! Choose any combo.`
+      ? `${g.players[g.cur].name} rolled ${analysis.combos?'':'6 or 7'} of a kind — the Joker! Choose any combo.`
       : `${g.players[g.cur].name} rolled! Conflicting combos — choose one to use.`;
     g.status=msg;
     broadcastGame(lobby);
@@ -431,6 +429,19 @@ function applyComboList(lobby,combos){
     g.phase='GAME_OVER'; g.winnerIdx=g.cur;
     g.status=`${p.name} rolled NINE of a kind! An impossible feat — instant victory!`;
     broadcastGame(lobby); return;
+  }
+
+  // ── DOUBLE QUAD (8 of a kind) — remove 2 cubes ────────
+  if(combos.includes('DOUBLE_QUAD')){
+    g.stats[g.cur].combos.QUAD+=2;
+    let removed=0;
+    for(let i=0;i<2;i++){
+      const slot=p.stall.findIndex(s=>s===0);
+      if(slot>=0){p.stall[slot]=1;removed++;}
+    }
+    msgs.push(removed>0
+      ?`Eight of a kind — ${removed} cube${removed>1?'s':''} removed! ${removed>1?'Both slots unlocked!':'Slot unlocked!'}`
+      :`Eight of a kind — no cubes left to remove`);
   }
 
   if(combos.includes('DOUBLE')){
@@ -531,8 +542,7 @@ function botTurn(lobby){
     return;
   }
   if(g.phase==='CHOOSE_COMBO'){
-    // Bot priority: PENTA > QUAD > TRIPLE_DOUBLE > DOUBLE
-    // This works for both normal conflicts and Joker (all 4 options presented)
+    // Bot priority for Joker (6 or 7 of a kind): PENTA > QUAD > TRIPLE_DOUBLE > DOUBLE
     const order=['PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'];
     const choice=order.find(k=>g.comboOptions.includes(k))||g.comboOptions[0];
     const gen=g.turnGen;
@@ -1211,8 +1221,13 @@ body{background:#0c0702;background-image:repeating-linear-gradient(90deg,rgba(25
         </div>
         <div class="combo-entry" style="border-top:1px solid rgba(160,112,40,.3);margin-top:.4rem;padding-top:.4rem">
           <div class="combo-name" style="color:#e8c84a">✦ JOKER</div>
-          <div class="combo-dice">7 of the same value</div>
+          <div class="combo-dice">6 or 7 of the same value</div>
           <div class="combo-effect">→ Choose any combo freely</div>
+        </div>
+        <div class="combo-entry">
+          <div class="combo-name" style="color:#e8c84a">✦ EIGHT OF A KIND</div>
+          <div class="combo-dice">8 of the same value</div>
+          <div class="combo-effect">→ Remove 2 red cubes instantly</div>
         </div>
         <div class="combo-entry">
           <div class="combo-name" style="color:#e8c84a">✦ NINE OF A KIND</div>
@@ -1363,12 +1378,13 @@ const CARD_FULL = {
 };
 
 const COMBO_INFO = {
-  PENTA:        { label:'🎯 Penta',          desc:'Opponent discards their entire hand', detail:'5 dice showing the same value' },
-  QUAD:         { label:'🔓 Quad',           desc:'Remove 1 red blocking cube from your stall', detail:'4 dice showing the same value' },
-  TRIPLE_DOUBLE:{ label:'🍾 Triple + Double',desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
-  DOUBLE:       { label:'🎲 Double',         desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
-  JOKER:        { label:'🃏 Joker',          desc:'Choose any combo — all 7 dice match!', detail:'7 dice showing the same value' },
-  INSTANT_WIN:  { label:'💀 Nine of a Kind', desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
+  PENTA:        { label:'🎯 Penta',           desc:'Opponent discards their entire hand', detail:'5 dice showing the same value' },
+  QUAD:         { label:'🔓 Quad',            desc:'Remove 1 red blocking cube from your stall', detail:'4 dice showing the same value' },
+  TRIPLE_DOUBLE:{ label:'🍾 Triple + Double', desc:'Stock 1 bottle (+ Temptress bonus if active)', detail:'3 of one value + 2 of another value' },
+  DOUBLE:       { label:'🎲 Double',          desc:'Draw 1 Character card from the deck', detail:'Any 2 dice showing the same value' },
+  JOKER:        { label:'🃏 Joker',           desc:'Choose any combo — 6 or 7 dice match!', detail:'6 or 7 dice showing the same value' },
+  DOUBLE_QUAD:  { label:'🔓🔓 Eight of a Kind', desc:'Remove 2 red cubes — both slots unlocked!', detail:'8 dice showing the same value' },
+  INSTANT_WIN:  { label:'💀 Nine of a Kind',  desc:'Instant victory — an impossible feat!', detail:'All 9 dice showing the same value' },
 };
 
 const DOTS={1:[4],2:[2,6],3:[2,4,6],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
@@ -1853,7 +1869,7 @@ function handleOverlays(s){
     const explain=s.rollExplain?'You rolled: '+s.rollExplain+'. ':'';
     const isJoker=s.comboPickReason==='JOKER';
     $('combo-overlay-msg').textContent=isJoker
-      ? explain+'🃏 Seven of a kind — the Joker! Choose any combo:'
+      ? explain+'🃏 Six or seven of a kind — the Joker! Choose any combo:'
       : explain+'These combos conflict — pick one:';
     const list=$('combo-choice-list'); list.innerHTML='';
     s.comboOptions.forEach(combo=>{
@@ -1989,6 +2005,11 @@ function renderComboBadges(combos, statusText){
       icon:'💀',
       effect:'Instant victory — an impossible feat!'
     },
+    DOUBLE_QUAD:{
+      cls:'c-quad', name:'EIGHT OF A KIND',
+      icon:'🔓🔓',
+      effect:'Two cubes removed — both slots unlocked!'
+    },
     PENTA:{
       cls:'c-penta', name:'PENTA',
       icon:'💥',
@@ -2012,7 +2033,7 @@ function renderComboBadges(combos, statusText){
   };
 
   // Show in impact order
-  ['INSTANT_WIN','PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
+  ['INSTANT_WIN','DOUBLE_QUAD','PENTA','QUAD','TRIPLE_DOUBLE','DOUBLE'].forEach(key=>{
     if(!combos.includes(key)) return;
     const info=COMBO_CARDS[key];
     const card=document.createElement('div');
