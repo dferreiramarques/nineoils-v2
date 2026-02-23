@@ -7,7 +7,7 @@ const { networkInterfaces } = require('os');
 
 const PORT        = process.env.PORT || 3000;
 const MAX_LOBBIES = 5;
-const INITIAL_DECK = ['TEMPTRESS','TEMPTRESS','BOY','BOY','BULLY','BULLY','BULLY','BULLY'];
+const INITIAL_DECK = ['TEMPTRESS','TEMPTRESS','BOY','BOY','BOY','BULLY','BULLY','BULLY','BULLY'];
 
 // ─── STATE ──────────────────────────────────────────────
 const lobbies = {};
