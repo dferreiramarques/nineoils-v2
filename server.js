@@ -23,8 +23,11 @@ function shuffle(a) {
   return r;
 }
 function sendTo(ws,msg){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(msg)); }
+// Ephemeral (per-player solo) instances are private clones of the SOLO
+// template — they never show up in the public lobby list.
 function lobbyList(){
   return Object.values(lobbies)
+    .filter(l=>!l.ephemeral)
     .sort((a,b)=>{
       if(a.solo&&!b.solo)return -1;
       if(!a.solo&&b.solo)return 1;
@@ -41,10 +44,10 @@ function broadcastLobbies(){ const list=lobbyList(); for(const ws of wss.clients
 // Pre-create 5 permanent tables + 1 solo table at startup
 for(let i=0;i<MAX_LOBBIES;i++){
   const id='TABLE_'+(i+1);
-  lobbies[id]={id,name:'Table '+(i+1),players:[null,null],names:['',''],game:null,graceTimers:[null,null],solo:false};
+  lobbies[id]={id,name:'Table '+(i+1),players:[null,null],names:['',''],game:null,graceTimers:[null,null],solo:false,ephemeral:false};
 }
 const SOLO_ID='SOLO';
-lobbies[SOLO_ID]={id:SOLO_ID,name:'Solo vs Bot',players:[null,null],names:['',''],game:null,graceTimers:[null,null],solo:true};
+lobbies[SOLO_ID]={id:SOLO_ID,name:'Solo vs Bot',players:[null,null],names:['',''],game:null,graceTimers:[null,null],solo:true,ephemeral:false};
 
 function createLobby(name){ return null; } // unused - tables are permanent
 function deleteLobby(id){
@@ -735,8 +738,20 @@ wss.on('connection',(ws,req)=>{
 
 
     if(msg.type==='JOIN_LOBBY'){
-      const lobby=lobbies[msg.lobbyId];
+      let lobby=lobbies[msg.lobbyId];
       if(!lobby){sendTo(ws,{type:'ERROR',text:'Table not found.'});return;}
+
+      // SOLO is a template, not a shared table: each player who "enters" it
+      // gets their own private, ephemeral instance, cloned from the
+      // template. It never shows up in the lobby list and is torn down as
+      // soon as the player leaves (or fails to reconnect), so it can never
+      // block others from playing solo at the same time.
+      if(lobby.solo&&!lobby.ephemeral){
+        const instId=`SOLO#${uid()}${uid()}`;
+        lobby={id:instId,name:lobby.name,players:[null,null],names:['',''],game:null,graceTimers:[null,null],solo:true,ephemeral:true};
+        lobbies[instId]=lobby;
+      }
+
       if(lobby.game&&lobby.game.phase!=='GAME_OVER'){sendTo(ws,{type:'ERROR',text:'Game in progress.'});return;}
 
       // Solo table: always seat 0 for human, reset bot seat
@@ -825,6 +840,8 @@ function hardLeaveBySlot(lobby,seat){
     lobby.names=['',''];
     lobby.graceTimers=[null,null];
   }
+  // Private solo instance: nobody else can ever use it again, so free it now.
+  if(lobby.ephemeral) delete lobbies[lobby.id];
   console.log(`[=] Table ${lobby.name} reset. Seats: ${lobby.names.map((n,i)=>n||'empty').join(' | ')}`);
 }
 
